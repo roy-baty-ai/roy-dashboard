@@ -1,3 +1,7 @@
+# 現在の公開対象：架空データ限定の接続検証
+
+設定はenabled=true / authOnly=false / testOnly=true。2つの固定架空hashだけを許可し、実案件hashは拒否します。公開概要は従来の実案件集計を維持し、架空のFirestore集計は管理者の試験欄にだけ表示します。以下のauthOnly説明は前段階の記録です。実8件への切替は親の全検証合格後です。
+
 # 現在の公開対象：認証確認のみ
 
 `config.js` は確認済み roy-dashboard-20261008 の公開Web設定、enabled=true / authOnly=trueです。管理者UIDは未登録。認証確認モードではFirestoreの初期化・読書き・初回移行・案件編集を行いません。Googleログイン後に本人のUIDとメール確認状態を表示します。全拒否RulesはConsole側で維持し、このリポジトリの候補Rulesは適用しません。
@@ -90,3 +94,7 @@ SDK bundleビルド成功。既存6件＋Firebase状態管理9件の計15件合�
 編集項目は次の作業・内部メモ・準備状態（NOT_READY/READY_FOR_HUMAN_GO）・既存確認項目の完了チェック・タイムゾーン付き最終確認日時です。初回送信GOはチェック不可。本文・宛先・価格・URL・画像参照・ID・送信済み状態を保持し、Rulesでもこの8件の保護フィールド変更を拒否します。既存ゲートの説明/証拠を自動書換しません。確認チェックは新しい外部QAの自動実施を意味しません。
 
 現在18単体テスト合格。Rulesはコンパイル未検証のままです。Emulatorの再取得・別環境での迂回実行は行いません。承認済みプロジェクトで架空データによる公式シミュレータ検証と、通常認証SDKの原子的保存テストを実施してから実案件投入へ進めます。
+
+## 独立レビュー後のRules修正（未適用・未公開）
+
+adminは確認済みRoy UID・メール・Google provider・email_verified・allowlistを全て検証します。confirmed_gates/missing_gatesはGO証跡を含めて不変。通常編集はgate_checksの非GO booleanだけで、元の証拠は保持します。公開件数は固定8件の状態・URLからRulesで導出し、private.summaryの自己申告だけでは通しません。公開読取にも数値/timestampのみのshape検査を適用します。コンパイルと実Rules試験は未完了です。

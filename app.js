@@ -5,7 +5,7 @@ const get = id => document.getElementById(id);
 function text(tag, value, className) { const el = document.createElement(tag); el.textContent = value; if (className) el.className = className; return el; }
 function list(id, entries, className, render) { const target = get(id); target.replaceChildren(); for (const entry of entries) { const row = text('div', '', className); render(row, entry); target.append(row); } }
 fetch('status.json', { cache: 'no-store' }).then(response => { if (!response.ok) throw new Error('Status unavailable'); return response.json(); }).then(data => {
-  if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyPrivateSnapshot) return;
+  if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyFirebaseConfig.testOnly && !window.RoyPrivateSnapshot) return;
   if (!Number.isFinite(Date.parse(data.updatedAt)) || !['needsHuman','now','waiting','recent','candidates','blockers'].every(key => Array.isArray(data[key])) || !Number.isFinite(data.revenue?.earned) || !(data.revenue.target > 0)) throw new Error('Invalid status');
   const day = Math.floor((Date.parse(data.updatedAt) + 9 * 3600000 - Date.parse('2026-10-01T00:00:00Z')) / 86400000) + 1;
   get('day').textContent = `DAY ${day}`;

@@ -8,7 +8,7 @@
   const embedded = window.RoyPrivateSnapshot;
   function metric(label, value, detail) { const box = node('div', '', 'sales-metric'); box.append(node('span', label), node('strong', value), node('small', detail)); return box; }
   (window.RoyPrivateSnapshot ? Promise.resolve(window.RoyPrivateSnapshot.summary) : fetch('outbound-summary.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw Error(); return r.json(); })).then(data => {
-    if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !embedded) return;
+    if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyFirebaseConfig.testOnly && !embedded) return;
     if (!['candidateCount', 'readyCount', 'preparingCount', 'sentCount', 'targetCount', 'confirmedRevenueUsd'].every(k => Number.isFinite(data[k]) && data[k] >= 0) || data.candidateCount !== data.readyCount + data.preparingCount + data.sentCount) throw Error();
     el('sales-metrics').replaceChildren(metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '案件数は売上に含めません'), metric('営業案件', `${data.candidateCount}件`, `目標：見本付きの強い${data.targetCount}件`), metric('READY_FOR_HUMAN_GO', `${data.readyCount}件`, '準備完了・人の判断待ち'), metric('準備中', `${data.preparingCount}件`, '未送信・残る確認あり'), metric('送信済み', `${data.sentCount}件`, '初回1通送信済み・受注とは別'));
     el('sales-source').textContent = `${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;

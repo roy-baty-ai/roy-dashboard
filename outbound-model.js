@@ -31,8 +31,10 @@
     const gateText = gate => typeof gate?.label === 'string' ? gate.label + (str(gate.evidence) ? `（${gate.evidence}）` : '') : '確認項目の形式が不明';
     return data.cases.map((row, index) => {
       if (!row || !str(row.business_name).trim()) throw new Error(`${index + 1}件目の business_name がありません。`);
-      const missing = Array.isArray(row.missing_gates) ? row.missing_gates : [{ label: '残る確認が未記録' }];
-      const confirmed = Array.isArray(row.confirmed_gates) ? row.confirmed_gates.map(gateText) : [];
+      const originalMissing = Array.isArray(row.missing_gates) ? row.missing_gates : [{ label: '残る確認が未記録' }];
+      const resolved=originalMissing.filter(g=>g.code!=='initial_send_go' && row.gate_checks?.[g.code]===true);
+      const missing=originalMissing.filter(g=>!resolved.includes(g));
+      const confirmed = Array.isArray(row.confirmed_gates) ? [...row.confirmed_gates,...resolved].map(gateText) : [];
       const remaining = missing.map(gateText);
       const previewUrl = safeUrl(row.preview_url);
       const verifiedAt = validDate(row.last_checked_at) ? row.last_checked_at : null;

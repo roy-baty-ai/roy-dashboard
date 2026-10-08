@@ -1,0 +1,31 @@
+# 完全な架空8件による最小試験（未公開・未実行）
+
+現在の公開設定はauthOnly=trueのまま。新サイト・新認証方式・権限追加は不要です。次段階の公開承認後、既存URLに限りconfigをauthOnly=false,testOnly=trueとして接続します。test-mode.mjsの固定架空hashと異なるデータは読込表示・移行・更新で拒否します。サーバーのcontrol/source.approvedSourceHashも同じhashにします。実データhashへの変更は試験終了まで禁止です。
+
+架空fixture canonical SHA256:
+556ddf286d0d0a8b98e515870ce212f10318f3aba7fc007356df1d54413e2479
+
+初期状態は8件・READY0・準備中8・送信済み0・Preview URL3・売上0。example.invalidのURL/メールのみで、架空URLを実公開確認済みとは扱いません。全件のinitial_send_goは未承認の固定証跡です。
+
+1. 正規Consoleでcontrol/sourceを mode=migration、approvedSourceHash=上記hashにする。privatePipeline/currentが不存在であることを確認。
+2. 承認後の既存UIでRoyがGoogleログイン。架空JSONを選択→「8件とhashを確認」→「照合済み8件を初回保存」。revision1を確認。再実行は空でないため拒否され、原本ファイルも不変。
+3. Consoleでmode=jsonに戻して保存拒否を確認。その後、架空更新試験だけのためmode=firestoreへ。
+4. 架空01を選び、QAチェックを完了、実際の試験日時（タイムゾーン付きISO）を入力、READYを選択して保存。revision2、READY1/準備中7/送信0/Preview3。本文、宛先、URL、元ゲート証跡、GO未承認が不変であることをConsole/read-backで比較。
+5. 同じ既存URLを別タブで通常ログインし、次の作業を変更して、もう一方の購読へ反映することを確認。ネットワーク断・ログアウト・権限拒否で内部表示が消えることも確認。
+6. 不正GO配列の改変・gate_checks.initial_send_go追加・private.summaryとpublic.readyCountを8へ偽装・previewCount8・古いrevisionはRules Playgroundの負例で拒否を確認する。UIに不正操作用ボタンは追加していない。UIのGOチェック自体はdisabled。
+7. transaction成功はSDKで確認する。Playgroundが複数文書を扱えない場合、正常transactionをDENYと誤認しない。競合の決定的負例は現在単体テストのみ合格で、実サービスでも既存SDKのsaveへ旧revisionを渡す必要がある。二つのタブで編集するだけでは購読で最新化されるため、必ず競合が起きたとは報告しない。
+8. 終了後、Consoleで架空privatePipeline/current/publicSummary/currentを削除、control/sourceをmode=jsonへ戻し、approvedSourceHashを削除。試験用設定のまま実案件へ移行しない。
+
+初期投入は私有文書だけです。publicSummaryは最初の正常更新transactionで作られます。最初から公開集計があると誤認しないでください。検証済み結果が揃うまで実案件を入れません。キーファイルやトークン抽出は一切不要です。
+
+## 全8件READY時の評価上限（追加・実行待ち）
+
+基本fixtureはURL3件なので全8READYの成功試験には使いません。別fixture `roy-firestore-synthetic-all-ready.json` は架空HTTPS URL8件、READY8、各案件の非GOゲート7項目がgate_checks=true、元のmissing_gatesはGOを含む8項目を保持します。GOは未承認のまま。example.invalidは架空値で、実在公開・QAの証拠ではありません。
+
+canonical hash: 4f95f0112a5f7d243e9a6f4007dab81b5cf61a35644026127a9e82b35d62bdb7
+
+ローカル試験モードの固定hash許可を、この2つの架空fixtureだけに拡張しています。本番authOnlyは未変更。
+
+承認後、基本試験の架空文書をConsoleで削除し、mode=migrationと追加fixtureのhashに設定して初回保存します。**初回createだけでは評価上限の試験になりません。** mode=firestoreへ変更し、架空01のnext_actionだけを変更・保存してrevision2と公開READY8/Preview8をread-back確認します。続けて他の架空案件のメモを変更してrevision3まで確認します。これにより8件すべてのpreservedCase/READY条件と公開集計のtransaction評価を実際に通します。
+
+失敗時は元revisionが不変か確認し、エラーコードとConsoleに表示される評価エラーを記録します。評価回数・アクセス回数上限をクライアント単体テストで保証したとは報告しません。Rules条件を外して通すことはせず、実データ投入は停止します。終了時は全て架空文書を削除しmode=jsonへ戻します。

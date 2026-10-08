@@ -2,7 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function admin() {
-      return request.auth != null && request.auth.token.email_verified == true
+      return request.auth != null
+        && request.auth.uid == 'atmDvobZO2U0T5VKrsAe69tEkdt1'
+        && request.auth.token.email == 'roy.lab.20261001@gmail.com'
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email_verified == true
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
     }
@@ -21,15 +25,44 @@ service cloud.firestore {
         && ids[4] is string && ids[5] is string && ids[6] is string && ids[7] is string
         && !("" in ids);
     }
+    function checks(row) { return row.get('gate_checks', {}); }
+    function gateAtDone(row, i) {
+      return i >= row.missing_gates.size() || row.missing_gates[i].code == 'initial_send_go'
+        || checks(row).get(row.missing_gates[i].code, false) == true;
+    }
+    function preview(row) { return row.preview_url is string && row.preview_url.matches('https://.+'); }
+    function ready(row) {
+      return row.sent == false && row.status == 'READY_FOR_HUMAN_GO' && row.readiness == 'READY_FOR_HUMAN_GO'
+        && preview(row) && row.last_checked_at is string && row.last_checked_at.size() > 0
+        && row.missing_gates.size() <= 8
+        && gateAtDone(row,0) && gateAtDone(row,1) && gateAtDone(row,2) && gateAtDone(row,3)
+        && gateAtDone(row,4) && gateAtDone(row,5) && gateAtDone(row,6) && gateAtDone(row,7);
+    }
+    function sent(row) { return row.sent == true && row.status == 'SENT_WAITING'; }
+    function readyMark(row) { return row.sent == false && row.status == 'READY_FOR_HUMAN_GO' && row.readiness == 'READY_FOR_HUMAN_GO'; }
+    function readyN(r) { return (readyMark(r[0])?1:0)+(readyMark(r[1])?1:0)+(readyMark(r[2])?1:0)+(readyMark(r[3])?1:0)+(readyMark(r[4])?1:0)+(readyMark(r[5])?1:0)+(readyMark(r[6])?1:0)+(readyMark(r[7])?1:0); }
+    function readyIds(r) { return [readyMark(r[0])?r[0].id:null,readyMark(r[1])?r[1].id:null,readyMark(r[2])?r[2].id:null,readyMark(r[3])?r[3].id:null,readyMark(r[4])?r[4].id:null,readyMark(r[5])?r[5].id:null,readyMark(r[6])?r[6].id:null,readyMark(r[7])?r[7].id:null].removeAll([null]); }
+    function sentN(r) { return (sent(r[0])?1:0)+(sent(r[1])?1:0)+(sent(r[2])?1:0)+(sent(r[3])?1:0)+(sent(r[4])?1:0)+(sent(r[5])?1:0)+(sent(r[6])?1:0)+(sent(r[7])?1:0); }
+    function previewN(r) { return (preview(r[0])?1:0)+(preview(r[1])?1:0)+(preview(r[2])?1:0)+(preview(r[3])?1:0)+(preview(r[4])?1:0)+(preview(r[5])?1:0)+(preview(r[6])?1:0)+(preview(r[7])?1:0); }
+    function booleanCheck(m,k) { return m.get(k,false) is bool; }
+    function allowedChecks(m) {
+      return m is map && m.keys().hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review'])
+        && booleanCheck(m,'anonymous_reload') && booleanCheck(m,'gmail_current_history') && booleanCheck(m,'send_reconciliation') && booleanCheck(m,'public_preview')
+        && booleanCheck(m,'visual_qa') && booleanCheck(m,'sales_screenshot') && booleanCheck(m,'current_source_contact') && booleanCheck(m,'bounded_contact_policy_review');
+    }
     function preservedCase(a, b) {
-      return b.diff(a).affectedKeys().hasOnly(['next_action','internal_note','status','readiness','confirmed_gates','missing_gates','last_checked_at'])
+      return b.diff(a).affectedKeys().hasOnly(['next_action','internal_note','status','readiness','gate_checks','last_checked_at'])
         && (a.sent == true ? (b.status == a.status && b.readiness == a.readiness) :
           (b.status in ['NOT_READY','READY_FOR_HUMAN_GO'] && b.readiness == b.status))
-        && b.confirmed_gates is list && b.missing_gates is list && b.last_checked_at is string;
+        && allowedChecks(checks(b)) && b.last_checked_at is string
+        && (b.status != 'READY_FOR_HUMAN_GO' || ready(b));
     }
     function scopedUpdate(a, b) {
       return b.diff(a).affectedKeys().hasOnly(['cases','summary'])
         && b.summary.diff(a.summary).affectedKeys().hasOnly(['ready_for_human_go','not_ready_unsent_count','ready_case_ids'])
+        && b.summary.get('ready_case_ids',[]) == readyIds(b.cases)
+        && b.summary.ready_for_human_go == readyN(b.cases)
+        && b.summary.not_ready_unsent_count == 8-readyN(b.cases)-sentN(b.cases)
         && a.cases.size() == 8 && b.cases.size() == 8
         && preservedCase(a.cases[0],b.cases[0]) && preservedCase(a.cases[1],b.cases[1])
         && preservedCase(a.cases[2],b.cases[2]) && preservedCase(a.cases[3],b.cases[3])
@@ -45,7 +78,7 @@ service cloud.firestore {
         && d.caseCount == d.readyCount + d.preparingCount + d.sentCount
         && d.previewCount is int && d.previewCount >= 0 && d.previewCount <= d.caseCount
         && d.confirmedRevenueUsd is number && d.confirmedRevenueUsd >= 0
-        && d.targetCount == 10 && d.revision is int && d.revision > 0 && d.updatedAt == request.time;
+        && d.targetCount == 10 && d.revision is int && d.revision > 0 && d.updatedAt is timestamp;
     }
     match /admins/{uid} {
       allow get: if request.auth != null && request.auth.uid == uid;
@@ -66,11 +99,13 @@ service cloud.firestore {
       allow list, delete: if false;
     }
     match /publicSummary/current {
-      allow get: if true;
+      allow get: if publicShape(resource.data);
       allow create, update: if admin() && mode() == 'firestore' && publicShape(request.resource.data)
+        && request.resource.data.updatedAt == request.time
         && request.resource.data.caseCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.cases.size()
-        && request.resource.data.readyCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.ready_for_human_go
-        && request.resource.data.sentCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.sent_cases_in_this_view
+        && request.resource.data.readyCount == readyN(getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.cases)
+        && request.resource.data.sentCount == sentN(getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.cases)
+        && request.resource.data.previewCount == previewN(getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.cases)
         && request.resource.data.confirmedRevenueUsd == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.operating_revenue_usd_last_recorded
         && getAfter(/databases/$(database)/documents/privatePipeline/current).data.revision == request.resource.data.revision
         && getAfter(/databases/$(database)/documents/privatePipeline/current).data.updatedAt == request.time;

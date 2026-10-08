@@ -14,9 +14,9 @@ test('only permitted editorial fields update; no send or GO mutation',()=>{const
 test('aggregate is numeric whitelist and excludes private fields',()=>{const a=aggregate({summary:{operating_revenue_usd_last_recorded:0}},()=>[{state:'sent',previewUrl:'https://example.invalid'}]);assert.equal(a.sentCount,1);assert.equal(Object.values(a).every(v=>typeof v==='number'),true);});
 test('transaction refuses old revision and JSON canonical mode',async()=>{let writes=0;const state={mode:'json',revision:2};const sdk={initializeFirestore(){},memoryLocalCache(){},doc(db,p){return p;},async runTransaction(db,fn){await fn({async get(path){return {exists:()=>true,data:()=>path==='control/source'?{mode:state.mode}:{revision:state.revision}};},set(){writes++;}});}};const store=createStore(sdk,{}, {currentUser:{uid:'test'}},()=>[]);await assert.rejects(store.save('test',{},2));state.mode='firestore';await assert.rejects(store.save('test',{},1));assert.equal(writes,0);});
 test('status/gate edits preserve immutable fields and cannot record send or GO',()=>{
- const gate={code:'qa',label:'QA'},go={code:'initial_send_go',label:'GO'};
+ const gate={code:'visual_qa',label:'QA'},go={code:'initial_send_go',label:'GO'};
  const p={cases:[{id:'x',sent:false,status:'NOT_READY',readiness:'NOT_READY',preview_url:'https://example.invalid',last_checked_at:'2026-10-08T10:00:00Z',email:{body:'original'},confirmed_gates:[],missing_gates:[gate,go]}]};
- const patch={status:'READY_FOR_HUMAN_GO',readiness:'READY_FOR_HUMAN_GO',confirmed_gates:[gate],missing_gates:[go],last_checked_at:'2026-10-08T11:00:00Z'};
+ const patch={status:'READY_FOR_HUMAN_GO',readiness:'READY_FOR_HUMAN_GO',gate_checks:{visual_qa:true},last_checked_at:'2026-10-08T11:00:00Z'};
  const n=editPayload(p,'x',patch);assert.equal(n.cases[0].email.body,'original');assert.equal(p.cases[0].status,'NOT_READY');
  assert.throws(()=>editPayload(p,'x',{...patch,confirmed_gates:[gate,go],missing_gates:[]}));
  assert.throws(()=>editPayload(p,'x',{...patch,status:'SENT_WAITING',readiness:'SENT_WAITING'}));
@@ -37,4 +37,16 @@ test('migration transaction refuses existing destination, wrong mode and wrong a
  const sdk={initializeFirestore(){},memoryLocalCache(){},doc(db,p){return p;},serverTimestamp(){return 'server-time';},async runTransaction(db,fn){return fn({async get(path){return {exists:()=>exists,data:()=>({mode,approvedSourceHash})};},set(){writes++;}});}};
  const store=createStore(sdk,{}, {currentUser:{uid:'test'}},parse);
  await assert.rejects(store.importInitial(prepared));exists=false;mode='json';await assert.rejects(store.importInitial(prepared));mode='migration';approvedSourceHash='0'.repeat(64);await assert.rejects(store.importInitial(prepared));assert.equal(writes,0);approvedSourceHash=hash;await store.importInitial(prepared);assert.equal(writes,1);
+});
+test('immutable gate evidence remains byte-for-byte; GO override is rejected',()=>{
+ const p={cases:[{id:'x',sent:false,status:'NOT_READY',readiness:'NOT_READY',confirmed_gates:[{code:'source_contact',label:'fixed evidence'}],missing_gates:[{code:'visual_qa',label:'QA'},{code:'initial_send_go',label:'approval evidence'}]}]};
+ for(const patch of [{missing_gates:[]},{confirmed_gates:[]},{gate_checks:{initial_send_go:true}}])assert.throws(()=>editPayload(p,'x',patch));
+ const n=editPayload(p,'x',{gate_checks:{visual_qa:true}});assert.deepEqual(n.cases[0].confirmed_gates,p.cases[0].confirmed_gates);assert.deepEqual(n.cases[0].missing_gates,p.cases[0].missing_gates);
+});
+test('synthetic test mode rejects any different source before database writes',async()=>{
+ const {canonicalJSON,prepareImport}=await import('../firebase/store.mjs');const {createHash}=await import('node:crypto');
+ const p={schema_version:1,cases:Array.from({length:8},(_,i)=>({id:'t-'+i})),summary:{case_count:8,ready_for_human_go:0,sent_cases_in_this_view:0,operating_revenue_usd_last_recorded:0}};
+ const parse=()=>p.cases.map(()=>({state:'preparing',previewUrl:null}));const hash=createHash('sha256').update(canonicalJSON(p)).digest('hex');let calls=0;
+ const store=createStore({initializeFirestore(){},memoryLocalCache(){},runTransaction(){calls++;}}, {}, {currentUser:{uid:'test'}},parse,{testOnly:true,testSourceHash:'0'.repeat(64)});
+ await assert.rejects(store.importInitial(await prepareImport(JSON.stringify(p),hash,parse)));assert.equal(calls,0);
 });
