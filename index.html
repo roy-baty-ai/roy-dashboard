@@ -1,10 +1,18 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
-<title>ROY — 観察画面</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>
+<title>ROY — 営業案件と活動状況</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script><script src="outbound-model.js" defer></script><script src="outbound.js" defer></script></head>
 <body><main class="shell">
 <header class="top"><div><div class="micro">AUTONOMOUS BUSINESS EXPERIMENT</div><h1 class="logo">ROY <span>/ LAB</span></h1><p>AIが自分の月額維持費を、自分の活動で稼ぐまで。</p></div><div class="day" id="day">DAY —</div></header>
 <section class="hero panel"><div class="revenue"><div class="micro">REVENUE</div><div class="money" id="revenue">—</div><div class="bar"><progress id="progress" max="100" value="0" aria-label="収益目標の達成率"></progress></div><div class="bar-meta"><span id="percent">—</span><span id="remaining">確認中</span></div></div><div class="live"><div class="active"><i aria-hidden="true"></i>現在の状態</div><h2>本業の状態</h2><p id="summary">状態を読み込み中…</p><small id="updated">最終更新：確認中</small></div></section>
+<nav class="section-nav" aria-label="画面内の移動"><a href="#outbound">営業案件</a><a href="#human">あなたの対応</a><a href="#activity">活動記録</a></nav>
+<section class="outbound panel" id="outbound" aria-labelledby="outbound-title">
+<div class="head"><div><div class="micro">SALES PIPELINE</div><h2 id="outbound-title">営業案件をひとつに</h2><p class="sales-note">目標は、見本付きの強い10件。案件数・準備完了・送信・売上を分けて管理します。</p></div><span class="badge notice" id="data-scope">公開可能な概要</span></div>
+<div class="sales-metrics" id="sales-metrics" aria-label="営業状況"><p>概要を読み込み中…</p></div>
+<p class="sales-note" id="sales-source" role="status"></p>
+<div class="private-panel"><h3>内部の案件詳細</h3><p>正本の business/outbound.json を選ぶと、この端末の画面内だけに詳細を表示します。ファイルの送信・保存は行いません。公開画面に内部データは含まれません。</p><div class="import-controls"><label class="file-label" for="outbound-file">正本JSONを選択</label><input id="outbound-file" type="file" accept=".json,application/json"><button id="clear-outbound" type="button" disabled>詳細を閉じて消去</button></div><p id="import-status" role="status">内部データ未読込。事業者名・宛先・営業本文は非公開です。</p></div>
+<p id="private-context" class="sales-note"></p><div id="private-outbound" hidden><p id="classification-counts" class="sales-note"></p><nav id="case-index" class="case-index" aria-label="案件の一覧"></nav><div class="sales-toolbar"><label for="outbound-search">案件を検索<input id="outbound-search" type="search" placeholder="事業者名・分類・提案価値"></label><label for="outbound-filter">準備状況<select id="outbound-filter"><option value="all">すべて</option><option value="ready">READY_FOR_HUMAN_GO</option><option value="preparing">準備中・要確認</option><option value="sent">送信済み</option></select></label></div><p class="sales-note">閲覧・絞り込みは営業GOになりません。送信や承認の操作はありません。</p><p id="outbound-results" role="status"></p><div id="outbound-cases"></div></div>
+</section>
 <section class="human panel" id="human"><div class="human-main"><div class="check" id="humanIcon" aria-hidden="true">—</div><div><div class="micro">NEEDS HUMAN</div><h2>あなたの対応</h2><div id="needsHuman" aria-live="polite"><p>確認中…</p></div></div></div><div class="badge" id="humanBadge">確認中</div></section>
 <div class="grid">
 <section class="panel card"><div class="head"><div><div class="micro">NOW</div><h2>現在の状況</h2></div><div class="num" id="nowCount">—</div></div><div id="now"></div></section>
@@ -12,6 +20,6 @@
 <section class="panel card"><div class="head"><div><div class="micro">BUSINESS</div><h2>収益候補</h2></div></div><div id="candidates"></div></section>
 <section class="panel card"><div class="head"><div><div class="micro">BLOCKERS</div><h2>障害</h2></div><div class="badge" id="blockerBadge">確認中</div></div><div id="blockers"></div></section>
 </div>
-<section class="activity"><div class="activity-head"><div><div class="micro">RECENT ACTIVITY</div><h2>最近の動き</h2></div><span>JST</span></div><div id="recent"></div></section>
+<section class="activity" id="activity"><div class="activity-head"><div><div class="micro">RECENT ACTIVITY</div><h2>最近の動き</h2></div><span>JST</span></div><div id="recent"></div></section>
 <p class="freshness" id="freshness">状態は手動で確認・更新します。</p><footer><span>ROY DOTS EXPERIMENT</span><span>PUBLIC STATUS · PRIVATE DATA EXCLUDED</span></footer><noscript><p>状態の表示にはJavaScriptを有効にしてください。</p></noscript>
 </main></body></html>
