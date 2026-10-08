@@ -8,6 +8,7 @@
   const embedded = window.RoyPrivateSnapshot;
   function metric(label, value, detail) { const box = node('div', '', 'sales-metric'); box.append(node('span', label), node('strong', value), node('small', detail)); return box; }
   (window.RoyPrivateSnapshot ? Promise.resolve(window.RoyPrivateSnapshot.summary) : fetch('outbound-summary.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw Error(); return r.json(); })).then(data => {
+    if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !embedded) return;
     if (!['candidateCount', 'readyCount', 'preparingCount', 'sentCount', 'targetCount', 'confirmedRevenueUsd'].every(k => Number.isFinite(data[k]) && data[k] >= 0) || data.candidateCount !== data.readyCount + data.preparingCount + data.sentCount) throw Error();
     el('sales-metrics').replaceChildren(metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '案件数は売上に含めません'), metric('営業案件', `${data.candidateCount}件`, `目標：見本付きの強い${data.targetCount}件`), metric('READY_FOR_HUMAN_GO', `${data.readyCount}件`, '準備完了・人の判断待ち'), metric('準備中', `${data.preparingCount}件`, '未送信・残る確認あり'), metric('送信済み', `${data.sentCount}件`, '初回1通送信済み・受注とは別'));
     el('sales-source').textContent = `${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
@@ -59,6 +60,24 @@
     el('private-context').textContent = `資料集約：${date(embedded.data.assembled_at_utc)}。Gmail最終成功：${date(embedded.data.mailbox?.last_successful_check_at)}。${embedded.data.mailbox?.warning || ''} 今回はサイト・Gmailの再確認なし。参照commit未収録の補足案件は各カードに明記しています。`;
     render();
   }
+  window.RoyOutboundView = {
+    clear,
+    show(payload, source) { clear(); cases=OutboundModel.parse(payload); el('private-outbound').hidden=false;el('clear-outbound').disabled=false;el('import-status').textContent=source;render();el('outbound-results').textContent=el('outbound-results').textContent.replace('端末内の正本',source); },
+    summary(data) {
+      if (!data) {el('revenue').textContent='—';el('summary').textContent='Firestoreの現在値は不明です。';el('sales-source').textContent='接続と権限を確認してください。';el('sales-metrics').replaceChildren(node('p','Firestoreの公開集計を確認できません。現在値は不明です。'));return;}
+      el('sales-metrics').replaceChildren(metric('確認済み売上',`$${data.confirmedRevenueUsd}`,'案件数は売上ではありません'),metric('営業案件',`${data.caseCount}件`,`目標：${data.targetCount}件`),metric('READY_FOR_HUMAN_GO',`${data.readyCount}件`,'人の判断待ち'),metric('準備中',`${data.preparingCount}件`,'残る確認あり'),metric('送信済み',`${data.sentCount}件`,'受注とは別'));
+      el('revenue').replaceChildren(node('span',`$${data.confirmedRevenueUsd}`));
+      el('progress').value=Math.min(100,data.confirmedRevenueUsd);el('percent').textContent=`${Math.min(100,data.confirmedRevenueUsd)}%`;el('remaining').textContent=`目標まで $${Math.max(0,100-data.confirmedRevenueUsd)}`;
+      el('summary').textContent=`Web制作 ${data.caseCount}案件・準備中 ${data.preparingCount}件・送信済み ${data.sentCount}件・READY ${data.readyCount}件。`;
+      el('updated').textContent='公開集計はFirestoreから取得。個別の業務確認日時とは別です。';
+      if(data.updatedAt?.toDate){const at=data.updatedAt.toDate();el('day').textContent=`DAY ${Math.floor((at.getTime()+9*3600000-Date.parse('2026-10-01T00:00:00Z'))/86400000)+1}`;}
+      el('humanBadge').textContent='内部画面で確認';el('needsHuman').replaceChildren(node('p','認証・QA・送信GOなどの残工程は、管理者ログイン後の案件記録で確認してください。'));
+      el('now').replaceChildren(node('p',el('summary').textContent));el('nowCount').textContent='1';el('waitingCount').textContent=String(data.sentCount);
+      el('waiting').replaceChildren(node('p','送信数は受注・入金ではありません。返信状況は内部記録を確認してください。'));
+      el('candidates').replaceChildren(node('p','案件数や提案価格は売上に含めません。'));el('blockers').replaceChildren(node('p','残る確認は管理者用の案件記録を参照してください。'));el('blockerBadge').textContent='内部画面で確認';
+      el('sales-source').textContent=`Firestoreの公開集計 revision ${data.revision}。公開見本URL ${data.previewCount}件。`;
+    }
+  };
   if (embedded) loadEmbedded();
   window.addEventListener('pagehide', () => { if (!embedded) clear(); });
 })();

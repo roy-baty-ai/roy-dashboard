@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function admin() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+    }
+    function mode() { return get(/databases/$(database)/documents/control/source).data.mode; }
+    function privateShape(d) {
+      return d.keys().hasOnly(['payload','revision','sourceHash','updatedAt','updatedBy'])
+        && d.payload is map && d.payload.schema_version == 1 && d.payload.cases is list
+        && d.payload.cases.size() <= 50 && d.revision is int && d.revision > 0
+        && d.sourceHash is string && d.sourceHash.size() == 64
+        && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+    }
+    function eightIds(rows) {
+      let ids = [rows[0].id,rows[1].id,rows[2].id,rows[3].id,rows[4].id,rows[5].id,rows[6].id,rows[7].id];
+      return rows.size() == 8 && ids.toSet().size() == 8
+        && ids[0] is string && ids[1] is string && ids[2] is string && ids[3] is string
+        && ids[4] is string && ids[5] is string && ids[6] is string && ids[7] is string
+        && !("" in ids);
+    }
+    function preservedCase(a, b) {
+      return b.diff(a).affectedKeys().hasOnly(['next_action','internal_note','status','readiness','confirmed_gates','missing_gates','last_checked_at'])
+        && (a.sent == true ? (b.status == a.status && b.readiness == a.readiness) :
+          (b.status in ['NOT_READY','READY_FOR_HUMAN_GO'] && b.readiness == b.status))
+        && b.confirmed_gates is list && b.missing_gates is list && b.last_checked_at is string;
+    }
+    function scopedUpdate(a, b) {
+      return b.diff(a).affectedKeys().hasOnly(['cases','summary'])
+        && b.summary.diff(a.summary).affectedKeys().hasOnly(['ready_for_human_go','not_ready_unsent_count','ready_case_ids'])
+        && a.cases.size() == 8 && b.cases.size() == 8
+        && preservedCase(a.cases[0],b.cases[0]) && preservedCase(a.cases[1],b.cases[1])
+        && preservedCase(a.cases[2],b.cases[2]) && preservedCase(a.cases[3],b.cases[3])
+        && preservedCase(a.cases[4],b.cases[4]) && preservedCase(a.cases[5],b.cases[5])
+        && preservedCase(a.cases[6],b.cases[6]) && preservedCase(a.cases[7],b.cases[7]);
+    }
+    function publicShape(d) {
+      return d.keys().hasOnly(['caseCount','readyCount','preparingCount','sentCount','previewCount','confirmedRevenueUsd','targetCount','revision','updatedAt'])
+        && d.caseCount is int && d.caseCount >= 0 && d.caseCount <= 50
+        && d.readyCount is int && d.readyCount >= 0
+        && d.preparingCount is int && d.preparingCount >= 0
+        && d.sentCount is int && d.sentCount >= 0
+        && d.caseCount == d.readyCount + d.preparingCount + d.sentCount
+        && d.previewCount is int && d.previewCount >= 0 && d.previewCount <= d.caseCount
+        && d.confirmedRevenueUsd is number && d.confirmedRevenueUsd >= 0
+        && d.targetCount == 10 && d.revision is int && d.revision > 0 && d.updatedAt == request.time;
+    }
+    match /admins/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+    match /control/source { allow get: if admin(); allow list, write: if false; }
+    match /privatePipeline/current {
+      allow get: if admin();
+      allow create: if admin() && mode() == 'migration' && privateShape(request.resource.data)
+        && request.resource.data.revision == 1 && eightIds(request.resource.data.payload.cases)
+        && request.resource.data.sourceHash == get(/databases/$(database)/documents/control/source).data.approvedSourceHash;
+      allow update: if admin() && mode() == 'firestore' && privateShape(request.resource.data)
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.sourceHash == resource.data.sourceHash
+        && scopedUpdate(resource.data.payload,request.resource.data.payload)
+        && getAfter(/databases/$(database)/documents/publicSummary/current).data.revision == request.resource.data.revision
+        && getAfter(/databases/$(database)/documents/publicSummary/current).data.updatedAt == request.time;
+      allow list, delete: if false;
+    }
+    match /publicSummary/current {
+      allow get: if true;
+      allow create, update: if admin() && mode() == 'firestore' && publicShape(request.resource.data)
+        && request.resource.data.caseCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.cases.size()
+        && request.resource.data.readyCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.ready_for_human_go
+        && request.resource.data.sentCount == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.sent_cases_in_this_view
+        && request.resource.data.confirmedRevenueUsd == getAfter(/databases/$(database)/documents/privatePipeline/current).data.payload.summary.operating_revenue_usd_last_recorded
+        && getAfter(/databases/$(database)/documents/privatePipeline/current).data.revision == request.resource.data.revision
+        && getAfter(/databases/$(database)/documents/privatePipeline/current).data.updatedAt == request.time;
+      allow list, delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

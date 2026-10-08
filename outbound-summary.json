@@ -1,11 +1,11 @@
 {
   "version": 1,
   "candidateCount": 8,
-  "readyCount": 0,
-  "preparingCount": 7,
+  "readyCount": 1,
+  "preparingCount": 6,
   "sentCount": 1,
   "targetCount": 10,
   "confirmedRevenueUsd": 0,
   "verifiedAt": null,
-  "note": "Web制作の案件8件（未送信7件・初回送信済み1件）。公開見本URLは3件（送信済みを含む）、ローカルのみ5件です。公開・QA・Gmail確認などに未完了項目があり、READYは0件。全事業の送信総数や、見本付き10件の完成を示す件数ではありません。個別の最終確認日時は端末内の正本読込で表示します。"
+  "note": "Web制作の案件8件（未送信7件・初回送信済み1件）。公開見本URLは3件（送信済みを含む）、ローカルのみ5件です。公開・QA・Gmail確認などに未完了項目があり、READYは1件（未送信7件のうち1件が人の判断待ち）。全事業の送信総数や、見本付き10件の完成を示す件数ではありません。個別の最終確認日時は端末内の正本読込で表示します。"
 }

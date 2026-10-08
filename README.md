@@ -67,3 +67,7 @@ node --test tests/outbound.test.cjs
 
 実データ検証コマンド：
 `PRIVATE_JSON=/private/snapshot.json PRIVATE_HTML=/private/dashboard.html PLAYWRIGHT_PATH=/path/to/playwright node tests/private-browser.cjs`
+
+## Firebase接続のローカル準備
+
+認証確認モード（authOnly）を追加しています。Firestoreへの接続・データ投入・案件編集はまだ無効です。構成、承認項目、正本切替手順と検証制約は [firebase/README.md](firebase/README.md) を参照してください。

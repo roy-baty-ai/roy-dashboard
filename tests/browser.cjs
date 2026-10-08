@@ -7,8 +7,10 @@ const base = { businessName: 'テスト専用事業者 <img src=x onerror=alert(
   for (const width of [1440, 393]) {
    const page = await browser.newPage({ viewport: { width, height: 1000 } }); const requests = [], errors = [];
    page.on('request', r => requests.push(r.url())); page.on('pageerror', e => errors.push(e.message));
+   await page.route('**/firebase/config.js', r=>r.fulfill({contentType:'text/javascript',body:'window.RoyFirebaseConfig={enabled:false};'}));
    await page.goto((process.env.DASHBOARD_URL || 'http://127.0.0.1:8765')); await page.waitForFunction(() => document.querySelectorAll('.sales-metric').length === 5);
    assert.equal(await page.locator('#private-outbound').isVisible(), false);
+   if (await page.locator('#firebase-status').count()) { await page.waitForFunction(() => document.querySelector('#firebase-status').textContent.includes('Firebase未接続')); assert.equal(await page.locator('#firebase-login').isDisabled(), true); assert.ok(requests.every(url => url.startsWith(process.env.DASHBOARD_URL || 'http://127.0.0.1:8765'))); }
    assert.ok((await page.locator('#sales-metrics').innerText()).includes('$0'));
    await page.screenshot({ path: `/tmp/roy-public-${width}.png`, fullPage: true });
    const before = requests.length;
@@ -31,6 +33,7 @@ const base = { businessName: 'テスト専用事業者 <img src=x onerror=alert(
    assert.deepEqual(errors, []);
    await page.close(); console.log(`PASS browser ${width}px: import, XSS, no upload/storage, filters, clear, errors, layout`);
   }
-  const page = await browser.newPage(); await page.route('**/outbound-summary.json', r => r.abort()); await page.goto((process.env.DASHBOARD_URL || 'http://127.0.0.1:8765')); await page.waitForFunction(() => document.querySelector('#sales-metrics').textContent.includes('不明')); await page.close(); console.log('PASS summary fetch failure shows unknown');
+  const page = await browser.newPage(); await page.route('**/outbound-summary.json', r => r.abort()); await page.route('**/firebase/config.js', r=>r.fulfill({contentType:'text/javascript',body:'window.RoyFirebaseConfig={enabled:false};'}));
+   await page.goto((process.env.DASHBOARD_URL || 'http://127.0.0.1:8765')); await page.waitForFunction(() => document.querySelector('#sales-metrics').textContent.includes('不明')); await page.close(); console.log('PASS summary fetch failure shows unknown');
  } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

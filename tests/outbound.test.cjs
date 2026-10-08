@@ -21,7 +21,7 @@ test('external links reject unsafe schemes and credentials', () => {
 test('public summary is aggregate-only and counts are consistent', () => {
   const summary = require('../outbound-summary.json');
   assert.deepEqual(Object.keys(summary).sort(), ['version','candidateCount','readyCount','preparingCount','sentCount','targetCount','confirmedRevenueUsd','verifiedAt','note'].sort());
-  assert.equal(summary.confirmedRevenueUsd, 0); assert.equal(summary.readyCount, 0); assert.equal(summary.candidateCount, summary.preparingCount + summary.sentCount);
+  assert.equal(summary.confirmedRevenueUsd, 0); assert.equal(summary.readyCount, 1); assert.equal(summary.candidateCount, summary.readyCount + summary.preparingCount + summary.sentCount);
 });
 test('snapshot schema preserves gates, image references, supplemental origin and sent history', () => {
   const snapshot = { schema_version: 1, cases: [
