@@ -14,7 +14,7 @@ fetch('status.json', { cache: 'no-store' }).then(response => { if (!response.ok)
   get('progress').value = percent;
   get('percent').textContent = `${Math.round(percent)}%`;
   get('remaining').textContent = `目標まで $${Math.max(0, data.revenue.target - data.revenue.earned)}`;
-  get('updated').textContent = `最終更新：${jst.format(new Date(data.updatedAt))} JST`;
+  get('updated').textContent = `記録更新：${jst.format(new Date(data.updatedAt))} JST`;
   get('summary').textContent = data.now[0] || '現在の作業情報はありません。';
   const needsHuman = data.needsHuman.length > 0;
   get('human').classList.toggle('attention', needsHuman);
@@ -31,6 +31,7 @@ fetch('status.json', { cache: 'no-store' }).then(response => { if (!response.ok)
   get('blockerBadge').className = `badge ${data.blockers.length ? 'notice' : 'good'}`;
   list('blockers', data.blockers.length ? data.blockers : [{ function: '障害なし / Nothing', detail: '確認済みの障害はありません。' }], 'row', (row, x) => row.append(text('strong', x.function), text('p', x.detail)));
   list('recent', data.recent.slice(0, 10), 'event', (row, x) => { const time = text('time', shortJst.format(new Date(x.at))); time.dateTime = x.at; time.title = `${jst.format(new Date(x.at))} JST`; const details = text('div', ''); details.append(text('p', x.event)); row.append(time, details); });
+  window.RoyDashboard?.status(data);
   get('freshness').textContent = `${data.freshness} DAY 1：2026年10月1日（日本時間）。`;
 }).catch(() => {
   get('updated').textContent = '状態を読み込めません。現在の状況は不明です。';

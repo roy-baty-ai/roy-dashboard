@@ -5,6 +5,10 @@
   function safeUrl(value) {
     try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password ? url.href : null; } catch { return null; }
   }
+  function location(row) {
+    const p = row.location;
+    return p && typeof p === 'object' && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && Math.abs(p.latitude) <= 90 && Math.abs(p.longitude) <= 180 ? { latitude: p.latitude, longitude: p.longitude } : null;
+  }
   function parse(data) {
     if (data?.schema_version === 1 && Array.isArray(data.cases)) return parseSnapshot(data);
     // Deliberately explicit: unknown canonical schemas must be mapped after review.
@@ -23,7 +27,7 @@
       const sent = row.status === 'SENT';
       const state = sent ? 'sent' : row.status === 'READY_FOR_HUMAN_GO' && remaining.length === 0 ? 'ready' : 'preparing';
       if (!sent && row.status !== 'READY_FOR_HUMAN_GO') remaining.push('READY_FOR_HUMAN_GO の確認待ち');
-      return { businessName: row.businessName, category: str(row.category), value: str(row.proposalValue), preparation: str(row.preparation), sourceStatus: str(row.status), state, previewUrl, imageUrl: safeUrl(row.salesImageUrl), body: str(row.salesBody), recipient: str(row.recipient), remaining, verifiedAt };
+      return { businessName: row.businessName, region: str(row.region), location: location(row), nextAction: str(row.nextAction), category: str(row.category), value: str(row.proposalValue), preparation: str(row.preparation), sourceStatus: str(row.status), state, previewUrl, imageUrl: safeUrl(row.salesImageUrl), body: str(row.salesBody), recipient: str(row.recipient), remaining, verifiedAt };
     });
   }
   function parseSnapshot(data) {
@@ -46,7 +50,7 @@
       const roleLabels = { sent: '送信済み', priority: '準備優先', reserve: '適格予備', additional_prepared: '追加準備' };
       const role = str(row.queue?.role);
       return {
-        businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), value: str(row.value_hypothesis),
+        businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), location: location(row), value: str(row.value_hypothesis),
         preparation: confirmed.join('\n') || '確認済みの準備記録なし', sourceStatus: str(row.status), state: sent ? 'sent' : ready ? 'ready' : 'preparing', previewUrl,
         previewNote: row.preview_status === 'MISSING' ? '未設定・未公開' : '既存URL。今回の集約での再確認なし', imageUrl: null,
         imageRef: str(row.sales_image?.library_file_id), imageName: str(row.sales_image?.filename), imageApproval: str(row.sales_image?.approval),
