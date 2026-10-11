@@ -1,9 +1,19 @@
 'use strict';
 (function (root) {
   const str = value => typeof value === 'string' ? value : '';
-  const validDate = value => typeof value === 'string' && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+  // Shared client contract; the Rules use these same shape patterns and Gregorian calendar checks.
+  const CHECKED_AT_PATTERN = '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-](0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)$';
+  const PREVIEW_URL_PATTERN = '^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?[.])+[A-Za-z]{2,63}(:443)?([/?#]([A-Za-z0-9._~!$&()*+,;=:@/?#-]|%[0-9A-Fa-f]{2})*)?$';
+  function validDate(value) {
+    if(typeof value!=='string'||!new RegExp(CHECKED_AT_PATTERN).test(value)||value.endsWith('-00:00'))return false;
+    const year=Number(value.slice(0,4)),month=Number(value.slice(5,7)),day=Number(value.slice(8,10));
+    const leap=year%4===0&&(year%100!==0||year%400===0);
+    const maxDay=month===2?(leap?29:28):[4,6,9,11].includes(month)?30:31;
+    return year>=1&&day<=maxDay;
+  }
   function safeUrl(value) {
-    try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password ? url.href : null; } catch { return null; }
+    if(typeof value!=='string'||value.length>2048||!new RegExp(PREVIEW_URL_PATTERN).test(value))return null;
+    try { return new URL(value).href; } catch { return null; }
   }
   function location(row) {
     const p = row.location;
@@ -64,7 +74,7 @@
       };
     });
   }
-  const api = { parse, safeUrl, validDate };
+  const api = { parse, safeUrl, validDate, CHECKED_AT_PATTERN, PREVIEW_URL_PATTERN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
-  else root.OutboundModel = api;
+  root.OutboundModel = api;
 })(globalThis);

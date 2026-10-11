@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function admin() {
+   return request.auth != null && request.auth.uid == 'atmDvobZO2U0T5VKrsAe69tEkdt1'
+    && request.auth.token.email == 'roy.lab.20261001@gmail.com'
+    && request.auth.token.firebase.sign_in_provider == 'google.com'
+    && request.auth.token.email_verified == true
+    && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+  }
+  function spaceOK(space) { return space in ['real','synthetic']; }
+  function active(space) { return get(/databases/$(database)/documents/privateRoy/$(space)/control/state).data.mode == 'active'; }
+  function sourceAllowed(space) { return active(space) && get(/databases/$(database)/documents/privateRoy/$(space)/control/state).data.allowSourceIngest == true; }
+  function hash(v) { return v is string && v.matches('^[0-9a-f]{64}$'); }
+  function id(v) { return v is string && v.matches('^roy-web-[0-9]{4}$'); }
+  function gate(p,n) { return n >= p.missing_gates.size() || p.missing_gates[n].code == 'initial_send_go' || p.gate_checks.get(p.missing_gates[n].code,false) == true; }
+  function validCalendar(s) {
+   let year=int(s[0:4]); let month=int(s[5:7]); let day=int(s[8:10]);
+   let leap=year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+   let maxDay=month == 2 ? (leap ? 29 : 28) : (month in [4,6,9,11] ? 30 : 31);
+   return year >= 1 && day <= maxDay;
+  }
+  function validCheckedAt(s) {
+   return s is string && s.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,3})?(Z|[+-](0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)$')
+    && !s.matches('.*-00:00$') && validCalendar(s);
+  }
+  function validPreview(s) {
+   return s is string && s.size() <= 2048 && s.matches('^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?[.])+[A-Za-z]{2,63}(:443)?([/?#]([A-Za-z0-9._~!$&()*+,;=:@/?#-]|%[0-9A-Fa-f]{2})*)?$');
+  }
+  function ready(p) {
+   return validPreview(p.preview_url) && validCheckedAt(p.last_checked_at)
+    && gate(p,0) && gate(p,1) && gate(p,2) && gate(p,3) && gate(p,4) && gate(p,5) && gate(p,6) && gate(p,7)
+    && gate(p,8) && gate(p,9) && gate(p,10) && gate(p,11) && gate(p,12) && gate(p,13) && gate(p,14) && gate(p,15);
+  }
+  function checks(m) {
+   return m is map && m.keys().hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review'])
+    && m.get('anonymous_reload',false) is bool && m.get('gmail_current_history',false) is bool
+    && m.get('send_reconciliation',false) is bool && m.get('public_preview',false) is bool
+    && m.get('visual_qa',false) is bool && m.get('sales_screenshot',false) is bool
+    && m.get('current_source_contact',false) is bool && m.get('bounded_contact_policy_review',false) is bool;
+  }
+  function gateShape(g) {
+   return g is map && g.keys().hasOnly(['code','label','evidence'])
+    && g.code is string && g.code.matches('^[a-z][a-z0-9_]{0,63}$')
+    && g.label is string && g.label.size() > 0 && g.label.size() <= 500
+    && g.get('evidence','') is string && g.get('evidence','').size() <= 4000;
+  }
+  function gateAt(items,n) { return n >= items.size() || gateShape(items[n]); }
+  function codeAt(items,n) { return n < items.size() ? items[n].code : ''; }
+  function gateCodes(items) {
+   return [
+    codeAt(items,0),codeAt(items,1),codeAt(items,2),codeAt(items,3),codeAt(items,4),codeAt(items,5),codeAt(items,6),codeAt(items,7),
+    codeAt(items,8),codeAt(items,9),codeAt(items,10),codeAt(items,11),codeAt(items,12),codeAt(items,13),codeAt(items,14),codeAt(items,15),
+    codeAt(items,16),codeAt(items,17),codeAt(items,18),codeAt(items,19),codeAt(items,20),codeAt(items,21),codeAt(items,22),codeAt(items,23),
+    codeAt(items,24),codeAt(items,25),codeAt(items,26),codeAt(items,27),codeAt(items,28),codeAt(items,29),codeAt(items,30),codeAt(items,31)
+   ].removeAll(['']);
+  }
+  function gateList(items) {
+   return gateAt(items,0) && gateAt(items,1) && gateAt(items,2) && gateAt(items,3) && gateAt(items,4) && gateAt(items,5) && gateAt(items,6) && gateAt(items,7)
+    && gateAt(items,8) && gateAt(items,9) && gateAt(items,10) && gateAt(items,11) && gateAt(items,12) && gateAt(items,13) && gateAt(items,14) && gateAt(items,15)
+    && gateAt(items,16) && gateAt(items,17) && gateAt(items,18) && gateAt(items,19) && gateAt(items,20) && gateAt(items,21) && gateAt(items,22) && gateAt(items,23)
+    && gateAt(items,24) && gateAt(items,25) && gateAt(items,26) && gateAt(items,27) && gateAt(items,28) && gateAt(items,29) && gateAt(items,30) && gateAt(items,31);
+  }
+  function restrictionAt(items,n) { return n >= items.size() || (items[n] is string && items[n].size() > 0 && items[n].size() <= 2000); }
+  function restrictions(items) {
+   return restrictionAt(items,0) && restrictionAt(items,1) && restrictionAt(items,2) && restrictionAt(items,3) && restrictionAt(items,4) && restrictionAt(items,5) && restrictionAt(items,6) && restrictionAt(items,7)
+    && restrictionAt(items,8) && restrictionAt(items,9) && restrictionAt(items,10) && restrictionAt(items,11) && restrictionAt(items,12) && restrictionAt(items,13) && restrictionAt(items,14) && restrictionAt(items,15)
+    && restrictionAt(items,16) && restrictionAt(items,17) && restrictionAt(items,18) && restrictionAt(items,19) && restrictionAt(items,20) && restrictionAt(items,21) && restrictionAt(items,22) && restrictionAt(items,23)
+    && restrictionAt(items,24) && restrictionAt(items,25) && restrictionAt(items,26) && restrictionAt(items,27) && restrictionAt(items,28) && restrictionAt(items,29) && restrictionAt(items,30) && restrictionAt(items,31);
+  }
+  function gateSets(confirmed,missing) {
+   let c=gateCodes(confirmed); let m=gateCodes(missing);
+   return c.toSet().size() == confirmed.size() && m.toSet().size() == missing.size() && !c.hasAny(m)
+    && m.hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review','initial_send_go']);
+  }
+  function payload(p,caseId) {
+   return p is map && p.keys().size() <= 32 && p.id == caseId && id(caseId)
+    && p.business_name is string && p.business_name.size() > 0 && p.business_name.size() <= 200
+    && p.confirmed_revenue_usd is number && p.confirmed_revenue_usd >= 0 && p.confirmed_revenue_usd <= 1000000000
+    && p.sent is bool && p.status in ['NOT_READY','READY_FOR_HUMAN_GO','SENT_WAITING'] && p.readiness == p.status
+    && p.sent == (p.status == 'SENT_WAITING')
+    && (p.sent ? (p.sent_evidence is map && p.email.sent_at is string) : p.sent_evidence == null)
+    && p.confirmed_gates is list && p.confirmed_gates.size() <= 32
+    && p.missing_gates is list && p.missing_gates.size() <= 16
+    && gateList(p.confirmed_gates) && gateList(p.missing_gates) && gateSets(p.confirmed_gates,p.missing_gates)
+    && p.restrictions is list && p.restrictions.size() <= 32 && restrictions(p.restrictions)
+    && p.next_action is string && p.next_action.size() <= 4000 && p.internal_note is string && p.internal_note.size() <= 4000
+    && (p.preview_url == null || validPreview(p.preview_url))
+    && checks(p.gate_checks) && (p.status != 'READY_FOR_HUMAN_GO' || ready(p));
+  }
+  function record(d,caseId) {
+   return d.keys().hasOnly(['schemaVersion','revision','source','sourceData','payload','changeKind','operationId','updatedBy','updatedAt'])
+    && d.schemaVersion == 2 && d.revision is int && d.revision > 0 && d.revision <= 1000000
+    && d.source.keys().hasOnly(['repo','commit','path','key','version','hash','intakeId'])
+    && d.source.repo == 'roy-baty-ai/roy-lab' && d.source.commit.matches('^[0-9a-f]{40}$')
+    && d.source.path in ['business/outbound.json','knowledge/ROY_CURRENT_STATE.md']
+    && d.source.key is string && d.source.key.size() > 0 && d.source.key.size() <= 300
+    && d.source.version is int && d.source.version > 0 && hash(d.source.hash) && hash(d.source.intakeId)
+    && hash(d.operationId) && d.changeKind in ['source','manual']
+    && payload(d.payload,caseId) && d.sourceData is map
+    && d.updatedBy == request.auth.uid && d.updatedAt == request.time;
+  }
+  function receiptMatches(space,caseId,d) {
+   let m=getAfter(/databases/$(database)/documents/privateRoy/$(space)/intakes/$(d.source.intakeId)).data;
+   let e=m.entries[caseId];
+   return m.sourceCommit == d.source.commit && e.sourceVersion == d.source.version && e.sourceHash == d.source.hash
+    && e.sourcePath == d.source.path && e.sourceKey == d.source.key && e.expectedRevision == d.revision - 1;
+  }
+  function historyMatches(space,caseId,d) {
+   return getAfter(/databases/$(database)/documents/privateRoy/$(space)/cases/$(caseId)/history/$(string(d.revision))).data.record == d;
+  }
+  function sourceShape(space,caseId,d) {
+   return d.changeKind == 'source' && d.operationId == d.source.intakeId && sourceAllowed(space)
+    && d.payload.diff(d.sourceData).affectedKeys().hasOnly(['internal_note'])
+    && d.sourceData.internal_note is string && d.sourceData.internal_note.size() <= 4000
+    && d.payload.status != 'READY_FOR_HUMAN_GO' && d.payload.gate_checks.size() == 0
+    && d.sourceData.status != 'READY_FOR_HUMAN_GO' && d.sourceData.gate_checks.size() == 0
+    && receiptMatches(space,caseId,d)
+    && caseId in getAfter(/databases/$(database)/documents/privateRoy/$(space)/registry/current).data.caseIds;
+  }
+  function preserveSent(a,b) { return !a.sent || (b.sent && b.sent_evidence == a.sent_evidence && b.email == a.email && b.offer == a.offer); }
+  function manual(a,b) {
+   return b.changeKind == 'manual' && b.source == a.source && b.sourceData == a.sourceData
+    && b.payload.diff(a.payload).affectedKeys().hasOnly(['next_action','internal_note','status','readiness','gate_checks','last_checked_at'])
+    && preserveSent(a.payload,b.payload) && b.operationId != a.operationId;
+  }
+  function sourceUpdate(space,caseId,a,b) {
+   return sourceShape(space,caseId,b) && b.source.version == a.source.version+1
+    && b.payload.internal_note == a.payload.internal_note && preserveSent(a.payload,b.payload)
+    && b.payload.restrictions.hasAll(a.payload.restrictions)
+    && b.payload.confirmed_gates.hasAll(a.payload.confirmed_gates);
+  }
+  function numericPublic(d) {
+   return d.keys().hasOnly(['caseCount','readyCount','preparingCount','sentCount','previewCount','confirmedRevenueUsd','targetCount','revision','updatedAt'])
+    && d.caseCount is int && d.caseCount >= 0 && d.caseCount <= 50
+    && d.readyCount is int && d.readyCount >= 0 && d.preparingCount is int && d.preparingCount >= 0
+    && d.sentCount is int && d.sentCount >= 0 && d.caseCount == d.readyCount+d.preparingCount+d.sentCount
+    && d.previewCount is int && d.previewCount >= 0 && d.previewCount <= d.caseCount
+    && d.confirmedRevenueUsd is number && d.confirmedRevenueUsd >= 0 && d.targetCount == 10
+    && d.revision is int && d.revision > 0 && d.updatedAt is timestamp;
+  }
+  match /admins/{uid} { allow get: if request.auth != null && request.auth.uid == uid; allow list, write: if false; }
+  // Old storage remains read-only during cutover. Never overwrite or import into it.
+  match /control/source { allow get: if admin(); allow list, write: if false; }
+  match /privatePipeline/current { allow get: if admin(); allow list, write: if false; }
+  match /publicSummary/current { allow get: if numericPublic(resource.data); allow list, write: if false; }
+  match /privateRoy/{space}/control/state { allow get: if spaceOK(space) && admin(); allow list, write: if false; }
+  match /privateRoy/{space}/registry/current {
+   allow get: if spaceOK(space) && admin();
+   function shape() { let d=request.resource.data; return d.keys().hasOnly(['caseIds','revision','intakeId','updatedBy','updatedAt'])
+    && d.caseIds is list && d.caseIds.size() <= 50 && d.caseIds.toSet().size() == d.caseIds.size()
+    && d.revision is int && hash(d.intakeId) && d.updatedBy == request.auth.uid && d.updatedAt == request.time; }
+   function added() { let d=request.resource.data;let m=getAfter(/databases/$(database)/documents/privateRoy/$(space)/intakes/$(d.intakeId)).data;
+    return d.caseIds.toSet().difference(resource.data.caseIds.toSet()).hasOnly(m.entries.keys()); }
+   allow create: if spaceOK(space) && admin() && sourceAllowed(space) && shape() && request.resource.data.revision == 1
+    && request.resource.data.caseIds.toSet().hasOnly(getAfter(/databases/$(database)/documents/privateRoy/$(space)/intakes/$(request.resource.data.intakeId)).data.entries.keys());
+   allow update: if spaceOK(space) && admin() && sourceAllowed(space) && shape() && request.resource.data.revision == resource.data.revision+1
+    && request.resource.data.caseIds.hasAll(resource.data.caseIds) && added();
+   allow list, delete: if false;
+  }
+  match /privateRoy/{space}/intakes/{intakeId} {
+   allow get: if spaceOK(space) && admin();
+   allow create: if spaceOK(space) && admin() && sourceAllowed(space) && hash(intakeId)
+    && request.resource.data.keys().hasOnly(['schemaVersion','space','sourceRepo','sourceCommit','finalization','entries'])
+    && request.resource.data.schemaVersion == 1 && request.resource.data.space == space
+    && request.resource.data.sourceRepo == 'roy-baty-ai/roy-lab' && request.resource.data.sourceCommit.matches('^[0-9a-f]{40}$')
+    && request.resource.data.finalization.keys().hasOnly(['state','actor','evidence'])
+    && request.resource.data.finalization.state == 'finalized' && request.resource.data.finalization.actor == 'Roy'
+    && request.resource.data.finalization.evidence is string && request.resource.data.finalization.evidence.size() >= 8 && request.resource.data.finalization.evidence.size() <= 2000
+    && request.resource.data.entries is map && request.resource.data.entries.size() >= 1 && request.resource.data.entries.size() <= 10;
+   allow list, update, delete: if false;
+  }
+  match /privateRoy/{space}/cases/{caseId} {
+   allow get: if spaceOK(space) && admin();
+   allow create: if spaceOK(space) && admin() && record(request.resource.data,caseId)
+    && request.resource.data.revision == 1 && request.resource.data.source.version == 1
+    && sourceShape(space,caseId,request.resource.data) && historyMatches(space,caseId,request.resource.data);
+   allow update: if spaceOK(space) && admin() && active(space) && record(request.resource.data,caseId)
+    && request.resource.data.revision == resource.data.revision+1
+    && (manual(resource.data,request.resource.data) || sourceUpdate(space,caseId,resource.data,request.resource.data))
+    && historyMatches(space,caseId,request.resource.data);
+   allow list, delete: if false;
+   match /history/{revision} {
+    allow get: if spaceOK(space) && admin();
+    allow create: if spaceOK(space) && admin() && active(space)
+     && request.resource.data.keys().hasOnly(['record']) && revision == string(request.resource.data.record.revision)
+     && request.resource.data.record.updatedAt == request.time
+     && getAfter(/databases/$(database)/documents/privateRoy/$(space)/cases/$(caseId)).data == request.resource.data.record;
+    allow list, update, delete: if false;
+   }
+  }
+  match /{document=**} { allow read, write: if false; }
+ }
+}

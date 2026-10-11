@@ -1,3 +1,4 @@
+import '../outbound-model.js';
 export function validateConfig(config) {
   if (!config?.enabled) return false;
   if (config.authProvider !== 'google' || !['apiKey','authDomain','projectId','appId'].every(k => typeof config.firebase?.[k] === 'string' && config.firebase[k].trim())) throw Error('接続先と認証プロバイダーの確認が必要です。');
@@ -13,7 +14,7 @@ export function editPayload(payload, id, patch) {
   const matches=payload.cases.filter(c=>c.id===id);if(matches.length!==1)throw Error('案件IDが不正です。');
   const old=matches[0];
   for(const key of ['next_action','internal_note'])if(key in patch && (typeof patch[key]!=='string'||patch[key].length>4000))throw Error('文字数が不正です。');
-  if('last_checked_at' in patch && (typeof patch.last_checked_at!=='string'||!Number.isFinite(Date.parse(patch.last_checked_at))||!/(Z|[+-]\d{2}:\d{2})$/.test(patch.last_checked_at)))throw Error('タイムゾーン付き確認日時が必要です。');
+  if('last_checked_at' in patch && !globalThis.OutboundModel.validDate(patch.last_checked_at))throw Error('タイムゾーン付き確認日時が必要です。');
   if('status' in patch || 'readiness' in patch) {
     if(old.sent || !['NOT_READY','READY_FOR_HUMAN_GO'].includes(patch.status)||patch.readiness!==patch.status)throw Error('送信履歴・GOはこの画面で変更できません。');
   }
@@ -22,7 +23,7 @@ export function editPayload(payload, id, patch) {
     if(!patch.gate_checks||Array.isArray(patch.gate_checks)||Object.entries(patch.gate_checks).some(([k,v])=>!allowed.includes(k)||typeof v!=='boolean'||!(old.missing_gates||[]).some(g=>g.code===k)))throw Error('承認証跡や既存ゲートの変更はできません。');
   }
   const next=structuredClone(payload),row=next.cases.find(c=>c.id===id);Object.assign(row,patch);
-  if(row.status==='READY_FOR_HUMAN_GO' && (!row.preview_url||!Number.isFinite(Date.parse(row.last_checked_at))||row.missing_gates.some(g=>g.code!=='initial_send_go' && row.gate_checks?.[g.code]!==true)))throw Error('READYに必要な確認が残っています。');
+  if(row.status==='READY_FOR_HUMAN_GO' && (!globalThis.OutboundModel.safeUrl(row.preview_url)||!globalThis.OutboundModel.validDate(row.last_checked_at)||row.missing_gates.some(g=>g.code!=='initial_send_go' && row.gate_checks?.[g.code]!==true)))throw Error('READYに必要な確認が残っています。');
   return next;
 }
 export function canonicalJSON(value) {

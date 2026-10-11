@@ -50,3 +50,18 @@ test('synthetic test mode rejects any different source before database writes',a
  const store=createStore({initializeFirestore(){},memoryLocalCache(){},runTransaction(){calls++;}}, {}, {currentUser:{uid:'test'}},parse,{testOnly:true,testSourceHash:'0'.repeat(64)});
  await assert.rejects(store.importInitial(await prepareImport(JSON.stringify(p),hash,parse)));assert.equal(calls,0);
 });
+test('READY uses strict calendar timestamps and bounded public HTTPS URLs',()=>{
+ const model=globalThis.OutboundModel;
+ for(const s of ['xTxZ','2026-02-30T00:00:00Z','1900-02-29T00:00:00Z','2100-02-29T00:00:00Z','2026-13-01T00:00:00Z','2026-01-00T00:00:00Z','2026-01-01T24:00:00Z','2026-01-01T00:60:00Z','2026-01-01T00:00:60Z','2026-01-01T00:00:00+14:01','2026-01-01T00:00:00-00:00','2026-01-01T00:00:00'])assert.equal(model.validDate(s),false,s);
+ for(const s of ['2000-02-29T23:59:59Z','2024-02-29T00:00:00.123+14:00','2026-04-30T00:00:00-13:59'])assert.equal(model.validDate(s),true,s);
+ for(const u of ['https://','https:// user.example','https://user:pass@example.com','https://localhost','https://127.0.0.1','https://example.com:8085','https://example.com/%GG','https://example.com/a b','https://example.com\\evil'])assert.equal(model.safeUrl(u),null,u);
+ for(const u of ['https://example.com','https://preview.example.com:443/a%20b?q=x#ok'])assert.ok(model.safeUrl(u),u);
+ const payload={cases:[{id:'x',sent:false,status:'NOT_READY',readiness:'NOT_READY',preview_url:'https://example.com',last_checked_at:'xTxZ',confirmed_gates:[],missing_gates:[],gate_checks:{}}]};
+ assert.throws(()=>editPayload(payload,'x',{status:'READY_FOR_HUMAN_GO',readiness:'READY_FOR_HUMAN_GO'}));
+ assert.throws(()=>editPayload(payload,'x',{last_checked_at:'2026-02-30T00:00:00Z'}));
+});
+test('Rules predicates share client patterns and calendar checks (static only)',async()=>{
+ const {readFile}=await import('node:fs/promises');const rules=await readFile(new URL('../firebase/firestore-finalized.rules',import.meta.url),'utf8');
+ for(const pattern of [globalThis.OutboundModel.CHECKED_AT_PATTERN,globalThis.OutboundModel.PREVIEW_URL_PATTERN])assert.ok(rules.includes(pattern));
+ assert.match(rules,/year % 400/);assert.match(rules,/validCalendar\(s\)/);assert.match(rules,/validCheckedAt\(p.last_checked_at\)/);assert.match(rules,/validPreview\(p.preview_url\)/);
+});
