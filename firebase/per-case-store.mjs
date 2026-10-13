@@ -1,5 +1,6 @@
 import {aggregate,canonicalJSON} from './store.mjs';
 import {verifyIntake,intakeReceipt,sourceRecord,manualRecord,digest,ROY_UID,stableId,validatePayload} from './intake.mjs';
+import {stageEvidence} from './evidence-validation.mjs';
 export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
  if(!['real','synthetic'].includes(space))throw Error('Invalid namespace');
  const db=sdk.initializeFirestore(app,{localCache:sdk.memoryLocalCache()}),base=`privateRoy/${space}`;
@@ -41,7 +42,7 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
    onStage('session-check');const user=uid();onStage('manifest-check');const m=await verifyIntake(input,{space}),receipt=intakeReceipt(m);
    // One bounded transaction per case. A partial intake is resumable; it is never reported as fully imported.
    const outcomes=[];
-   for(const e of m.entries){onStage('transaction-start');outcomes.push(await sdk.runTransaction(db,async tx=>{
+   for(const e of m.entries){onStage('evidence-validation');await stageEvidence(sdk,db,space,m.manifestHash,e);onStage('transaction-start');outcomes.push(await sdk.runTransaction(db,async tx=>{
     onStage('transaction-read');
     const [control,index,intake,current]=await Promise.all([tx.get(ref(`${base}/control/state`)),tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/intakes/${m.manifestHash}`)),tx.get(ref(`${base}/cases/${e.caseId}`))]);
     onStage('transaction-validate');

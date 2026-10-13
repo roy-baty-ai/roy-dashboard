@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "space": "synthetic",
+  "sourceRepo": "roy-baty-ai/roy-lab",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "finalization": {
+    "state": "finalized",
+    "actor": "Roy",
+    "evidence": "Explicit synthetic-only verification fixture. Zero commit and source key are fictitious, never real provenance."
+  },
+  "entries": [
+    {
+      "caseId": "roy-web-0001",
+      "sourcePath": "knowledge/ROY_CURRENT_STATE.md",
+      "sourceKey": "synthetic:connection-check-only",
+      "expectedRevision": 0,
+      "sourceVersion": 1,
+      "sourceHash": "c9c08d8fdbe325b9e2b5eccedd012100647bc477386cd9f3a64f55a527403e25",
+      "payload": {
+        "id": "roy-web-0001",
+        "business_name": "架空の接続確認案件",
+        "sent": false,
+        "confirmed_revenue_usd": 0,
+        "sent_evidence": null,
+        "status": "NOT_READY",
+        "readiness": "NOT_READY",
+        "confirmed_gates": [],
+        "missing_gates": [
+          {
+            "code": "visual_qa",
+            "label": "架空QA・未実施"
+          },
+          {
+            "code": "initial_send_go",
+            "label": "送信GOなし"
+          }
+        ],
+        "gate_checks": {},
+        "restrictions": [
+          "架空試験専用・外部送信禁止"
+        ],
+        "next_action": "保存と再取得を確認",
+        "internal_note": "",
+        "preview_url": "https://example.invalid",
+        "last_checked_at": "2026-10-09T00:00:00Z",
+        "email": {
+          "body": "架空本文・送信禁止"
+        },
+        "offer": {
+          "amount": 0,
+          "currency": "JPY"
+        }
+      }
+    }
+  ],
+  "manifestHash": "7b5b9fb554decc7b73364043327e3b91fbc2fa7dc515b800364ff4b56763f622"
+}
