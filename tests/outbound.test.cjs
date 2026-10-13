@@ -32,3 +32,44 @@ test('snapshot schema preserves gates, image references, supplemental origin and
   assert.equal(sent.state, 'sent'); assert.equal(sent.imageUrl, null); assert.equal(sent.imageRef, 'libfile_test'); assert.equal(sent.body, '履歴本文');
   assert.equal(prep.state, 'preparing'); assert.equal(prep.previewUrl, null); assert.ok(prep.remaining.includes('Gmail未確認')); assert.match(prep.canonicalNote, /未収録/);
 });
+test('sales evidence separates interested, declined, contracted and paid without inferring revenue',()=>{
+ const base={business_name:'架空検証',sent:true,status:'SENT_WAITING',email:{},missing_gates:[],confirmed_gates:[],confirmed_revenue_usd:0};
+ const one=patch=>parse({schema_version:1,cases:[{...base,...patch}]})[0];
+ for(const stage of ['interested','declined','contracted']){const c=one({sales:{stage,evidence:'架空の確認証拠'}});assert.equal(c.salesStage,stage);assert.equal(c.state,'sent');assert.equal(c.confirmedRevenueUsd,0);}
+ assert.equal(one({sales:{stage:'paid',evidence:'架空の確認証拠'}}).salesStage,'sent');
+ assert.equal(one({sales:{stage:'paid',evidence:'架空の確認証拠'},confirmed_revenue_usd:100}).salesStage,'paid');
+ assert.equal(one({sales:{stage:'contracted'}}).salesStage,'sent');
+ assert.equal(one({confirmed_revenue_usd:undefined,offer:{amount:99999}}).confirmedRevenueUsd,null);
+ assert.equal(one({sent:false,status:'NOT_READY',sales:{stage:'hold',evidence:'適合確認待ち'}}).salesStage,'hold');
+ assert.equal(one({sent:false,status:'NOT_READY',sales:{stage:'paid',evidence:'矛盾した証拠'},confirmed_revenue_usd:10}).salesStage,'candidate');
+ const {matches}=require('../outbound-model.js');assert.equal(matches(one({sales:{stage:'interested',evidence:'確認'}}),'sales:interested'),true);assert.equal(matches(one({sales:{stage:'interested',evidence:'確認'}}),'sent'),true);
+});
+
+test('missing or unrecognized stage is unknown, not a confirmed candidate',()=>{
+ for(const status of [undefined,'MISSING_SOURCE'])assert.equal(parse([{businessName:'架空',status}])[0].salesStage,'unknown');
+ assert.equal(parse([{businessName:'架空',status:'NOT_READY'}])[0].salesStage,'candidate');
+});
+
+
+test('minute-precision sent evidence retains source precision without weakening READY dates',()=>{
+ const base={business_name:'架空の送信記録',sent:true,status:'SENT_WAITING',confirmed_gates:[],missing_gates:[]};
+ const parsed=email=>parse({schema_version:1,cases:[{...base,email}]} )[0];
+ const raw='2026-10-13T15:22+09:00',c=parsed({sent_at:raw,sent_at_precision:'minute'});
+ assert.equal(c.sentAt,raw);assert.equal(c.sentAtPrecision,'minute');
+ assert.equal(require('../outbound-model.js').validDate(raw),false);
+ for(const bad of ['2026-02-30T15:22+09:00','2026-10-13T25:22+09:00','2026-10-13T15:22-00:00'])assert.equal(parsed({sent_at:bad,sent_at_precision:'minute'}).sentAt,null);
+ assert.equal(parsed({sent_at:raw}).sentAt,null);
+ assert.equal(parsed({sent_at:'2026-10-13T15:22:19+09:00'}).sentAtPrecision,'second');
+});
+
+
+test('rejected sales evidence cannot masquerade as a reply or payment record',()=>{
+ const one=sales=>parse({schema_version:1,cases:[{business_name:'架空',sent:true,status:'SENT_WAITING',sales,confirmed_revenue_usd:0}]})[0];
+ for(const stage of ['paid','hold','unrecognized']){
+  const c=one({stage,evidence:'REJECTED_FACT',checked_at:'2026-10-13T00:00:00Z'});
+  assert.equal(c.salesStage,'sent');assert.equal(c.salesEvidence,'');assert.equal(c.salesCheckedAt,null);
+  assert.equal(c.hasFollowupEvidence,false);assert.doesNotMatch(c.replyNote,/REJECTED_FACT/);
+ }
+ assert.equal(one({stage:'sent',evidence:'送信の証跡のみ'}).hasFollowupEvidence,false);
+ assert.equal(one({stage:'interested',evidence:'関心返信の証跡'}).hasFollowupEvidence,true);
+});

@@ -13,7 +13,11 @@
   function locate(c) {
     const p=c.location;
     if (p && Number.isFinite(p.longitude) && Number.isFinite(p.latitude) && p.longitude >= 122 && p.longitude <= 149 && p.latitude >= 24 && p.latitude <= 46) {
-      return {longitude:p.longitude,latitude:p.latitude,label:c.region||'記録座標',basis:'記録座標'};
+      if(p.basis==='municipality') {
+        if(!p.label || !p.sourceUrl || !p.verifiedAt)return null;
+        return {longitude:p.longitude,latitude:p.latitude,label:p.label,basis:'市区町村の代表点（事業所の位置ではありません）',sourceUrl:p.sourceUrl};
+      }
+      return {longitude:p.longitude,latitude:p.latitude,label:p.label||c.region||'記録座標',basis:'記録座標'};
     }
     if(p)return null;
     const region=typeof c.region==='string'?c.region.trim():'';
