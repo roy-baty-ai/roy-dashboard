@@ -17,8 +17,20 @@
   }
   function location(row) {
     const p = row.location;
-    return p && typeof p === 'object' && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && Math.abs(p.latitude) <= 90 && Math.abs(p.longitude) <= 180 ? { latitude: p.latitude, longitude: p.longitude } : null;
+    return p && typeof p === 'object' && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && Math.abs(p.latitude) <= 90 && Math.abs(p.longitude) <= 180 ? { latitude: p.latitude, longitude: p.longitude, basis: str(p.basis), label: str(p.label), sourceUrl: safeUrl(p.source_url), verifiedAt: validDate(p.verified_at) ? p.verified_at : null } : null;
   }
+  const stageLabels = {unknown:'段階未確認',candidate:'候補',hold:'保留・未送信',sent:'送信済み',interested:'関心返信',declined:'断り返信',contracted:'契約確認',paid:'入金確認'};
+  function sales(row, sent) {
+    const fact=row.sales || {}, evidence=str(fact.evidence).trim();
+    let stage=sent?'sent':row.status==='HOLD'?'hold':['NOT_READY','READY_FOR_HUMAN_GO'].includes(row.status)?'candidate':'unknown';
+    if (evidence && Object.hasOwn(stageLabels,fact.stage) &&
+        (sent ? !['candidate','hold'].includes(fact.stage) : ['candidate','hold'].includes(fact.stage))) stage=fact.stage;
+    // An offer or a sent email never establishes payment. Keep missing money unknown.
+    const revenue=Number.isFinite(row.confirmed_revenue_usd)&&row.confirmed_revenue_usd>=0?row.confirmed_revenue_usd:null;
+    if(stage==='paid' && !(revenue>0))stage=sent?'sent':'candidate';
+    return {salesStage:stage,salesLabel:stageLabels[stage],salesEvidence:evidence,salesCheckedAt:validDate(fact.checked_at)?fact.checked_at:null,confirmedRevenueUsd:revenue};
+  }
+  function matches(c,filter){return filter==='all'||(filter.startsWith('sales:')?c.salesStage===filter.slice(6):c.state===filter);}
   function parse(data) {
     if (data?.schema_version === 1 && Array.isArray(data.cases)) return parseSnapshot(data);
     // Deliberately explicit: unknown canonical schemas must be mapped after review.
@@ -37,7 +49,7 @@
       const sent = row.status === 'SENT';
       const state = sent ? 'sent' : row.status === 'READY_FOR_HUMAN_GO' && remaining.length === 0 ? 'ready' : 'preparing';
       if (!sent && row.status !== 'READY_FOR_HUMAN_GO') remaining.push('READY_FOR_HUMAN_GO の確認待ち');
-      return { businessName: row.businessName, region: str(row.region), location: location(row), nextAction: str(row.nextAction), category: str(row.category), value: str(row.proposalValue), preparation: str(row.preparation), sourceStatus: str(row.status), state, previewUrl, imageUrl: safeUrl(row.salesImageUrl), body: str(row.salesBody), recipient: str(row.recipient), remaining, verifiedAt };
+      return { ...sales(row,sent), businessName: row.businessName, region: str(row.region), location: location(row), nextAction: str(row.nextAction), category: str(row.category), value: str(row.proposalValue), preparation: str(row.preparation), sourceStatus: str(row.status), state, previewUrl, imageUrl: safeUrl(row.salesImageUrl), body: str(row.salesBody), recipient: str(row.recipient), remaining, verifiedAt };
     });
   }
   function parseSnapshot(data) {
@@ -60,7 +72,7 @@
       const roleLabels = { sent: '送信済み', priority: '準備優先', reserve: '適格予備', additional_prepared: '追加準備' };
       const role = str(row.queue?.role);
       return {
-        businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), location: location(row), value: str(row.value_hypothesis),
+        ...sales(row,sent), businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), location: location(row), value: str(row.value_hypothesis),
         preparation: confirmed.join('\n') || '確認済みの準備記録なし', sourceStatus: str(row.status), state: sent ? 'sent' : ready ? 'ready' : 'preparing', previewUrl,
         previewNote: row.preview_status === 'MISSING' ? '未設定・未公開' : '既存URL。今回の集約での再確認なし', imageUrl: null,
         imageRef: str(row.sales_image?.library_file_id), imageName: str(row.sales_image?.filename), imageApproval: str(row.sales_image?.approval),
@@ -70,11 +82,11 @@
         role, roleLabel: (roleLabels[role] || '区分未記録') + (role === 'priority' && Number.isInteger(row.queue?.priority) ? ` ${row.queue.priority}` : ''),
         offer: Number.isFinite(row.offer?.amount) ? `${row.offer.amount.toLocaleString('ja-JP')} ${str(row.offer.currency)}${row.offer.tax === 'exclusive' ? '（税別）' : ''}・提案価格、売上ではありません` : '',
         offerScope: str(row.offer?.scope), canonicalNote: row.canonical?.included_at_commit === false ? 'この案件は参照commitの正本に未収録（補足資料）' : '参照commitの正本に収録',
-        replyNote: sent ? '返信の現在状態はGmail最終確認以降不明。無返信を断定せず、追送・再送なし。' : '未送信。初回送信GOは別途必要です。'
+        replyNote: row.sales?.evidence ? `${stageLabels[sales(row,sent).salesStage]}：${str(row.sales.evidence)}` : sent ? '返信の現在状態はGmail最終確認以降不明。無返信を断定せず、追送・再送なし。' : '未送信。初回送信GOは別途必要です。'
       };
     });
   }
-  const api = { parse, safeUrl, validDate, CHECKED_AT_PATTERN, PREVIEW_URL_PATTERN };
+  const api = { parse, matches, stageLabels, safeUrl, validDate, CHECKED_AT_PATTERN, PREVIEW_URL_PATTERN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.OutboundModel = api;
 })(globalThis);
