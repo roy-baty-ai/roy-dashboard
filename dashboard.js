@@ -42,8 +42,12 @@
     const priority=[...all].sort((a,b)=>['ready','preparing','sent'].indexOf(a.state)-['ready','preparing','sent'].indexOf(b.state)).slice(0,3);
     get('priority-rows').replaceChildren(...priority.map(c=>row(c,all.indexOf(c))));get('priority-empty').hidden=priority.length>0;maps();
   }
-  function source(value){get('priority-source').textContent=value;get('map-record-source').textContent=value;if(!window.RoyPrivateSnapshot)get('data-scope').textContent=value.includes('架空')?'公開概要 / 架空データ試験':'公開可能な概要';}
-  function clear(){source('内部データ未読込');close(false);delete get('focus-case').dataset.case;get('focus-case').dataset.switch='settings';get('focus-case').textContent='内部案件を確認する →';loaded=false;records=[];get('all-rows').replaceChildren();get('priority-rows').replaceChildren();get('priority-empty').hidden=false;get('case-empty').hidden=false;get('map-filter').value='all';maps();}
+  function source(value,scope='private'){
+    get('priority-source').textContent=value;get('map-record-source').textContent=value;
+    const labels=scope==='synthetic'?['管理者専用の架空データ試験','SYNTHETIC TEST DATA · ADMIN ONLY']:scope==='private'?['管理者専用の営業データ','PRIVATE SALES DATA · ADMIN ONLY']:['公開可能な概要','PUBLIC SUMMARY · PRIVATE DATA NOT DISPLAYED'];
+    if(!window.RoyPrivateSnapshot){get('data-scope').textContent=labels[0];get('footer-data-scope').textContent=labels[1];}
+  }
+  function clear(){source('内部データ未読込','public');close(false);delete get('focus-case').dataset.case;get('focus-case').dataset.switch='settings';get('focus-case').textContent='内部案件を確認する →';loaded=false;records=[];get('all-rows').replaceChildren();get('priority-rows').replaceChildren();get('priority-empty').hidden=false;get('case-empty').hidden=false;get('map-filter').value='all';maps();}
   function status(data){
     get('recent-compact').replaceChildren();
     for(const activity of data.recent.slice(0,3)){

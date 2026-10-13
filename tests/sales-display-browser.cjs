@@ -45,21 +45,25 @@ async function until(fn,label,attempts=120){for(let i=0;i<attempts;i++){if(await
   ws.addEventListener('message',event=>{const m=JSON.parse(event.data);if(m.id){const p=pending.get(m.id);if(p){pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.text+': '+(m.params.exceptionDetails.exception?.description||''));});
   const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject,timer:setTimeout(()=>{pending.delete(id);reject(Error('CDP timeout '+method));},15000)});ws.send(JSON.stringify({id,method,params}));});
   const evaluate=async expression=>{const r=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
+  const assertScope=async privateVisible=>{
+   assert.equal(await evaluate("document.querySelector('#data-scope').textContent"),privateVisible?(testOnly?'管理者専用の架空データ試験':'管理者専用の営業データ'):'公開可能な概要');
+   assert.equal(await evaluate("document.querySelector('#footer-data-scope').textContent"),privateVisible?(testOnly?'SYNTHETIC TEST DATA · ADMIN ONLY':'PRIVATE SALES DATA · ADMIN ONLY'):'PUBLIC SUMMARY · PRIVATE DATA NOT DISPLAYED');
+  };
   await send('Page.enable');await send('Runtime.enable');await send('Network.enable');await send('Network.setBlockedURLs',{urls:['https://*']});
   const results=[];
   for(const width of [1440,393,320]){
    await send('Page.navigate',{url:'about:blank'});await until(()=>evaluate("location.href==='about:blank'&&!window.__displayTest"),'fresh document');
    await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
    await send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/#map'});
-   await until(()=>evaluate("!!window.__displayTest && !document.querySelector('#firebase-login').disabled"),'application ready');
+   await until(()=>evaluate("!!window.__displayTest && !document.querySelector('#firebase-login').disabled"),'application ready');await assertScope(false);
    assert.match(await evaluate("document.querySelector('#map-stats').textContent"),/未取得/);
    await evaluate("document.querySelector('[data-view=\"settings\"]').click();document.querySelector('#firebase-login').click()");
    await until(()=>evaluate("document.querySelector('#firebase-status').textContent.includes('未移行')"),'missing registry');
    assert.match(await evaluate("document.querySelector('#map-stats').textContent"),/未取得/);
    await evaluate("window.__displayTest.setMode('empty')");
-   await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 0件')"),'known empty');
+   await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 0件')"),'known empty');await assertScope(true);
    await evaluate("window.__displayTest.setMode('populated')");
-   await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 3件')"),'loaded records');
+   await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 3件')"),'loaded records');await assertScope(true);
    await evaluate("document.querySelector('[data-view=\"map\"]').click()");
    const stats=await evaluate("document.querySelector('#map-stats').textContent");assert.match(stats,/所在地あり 0件 \/ 不明 3件/);assert.match(stats,/関心返信（記録あり）1件/);assert.match(stats,/保留・未送信（記録あり）1件/);assert.match(stats,/入金確認（記録あり）0件/);
    assert.equal(await evaluate("document.querySelectorAll('.pin').length"),0);
@@ -75,18 +79,18 @@ async function until(fn,label,attempts=120){for(let i=0;i<attempts;i++){if(await
    assert.equal(await evaluate("/PRIVATE_MARKER|private-marker@example/.test(document.body.textContent+' '+[...document.querySelectorAll('input,textarea,select')].map(x=>x.value).join(' '))"),false,'private DOM/form values cleared');
    assert.equal(await evaluate("document.querySelector('#firebase-case').onchange===null"),true);
    assert.equal(await evaluate("document.querySelector('#firebase-test-summary').textContent"),'');
-   assert.equal(await evaluate("window.__displayTest.listenerCount()"),0);
+   assert.equal(await evaluate("window.__displayTest.listenerCount()"),0);await assertScope(false);
    assert.ok(await evaluate("window.__displayTest.staleDelivered()")>=3,'retired callbacks actually delivered');
    assert.match(await evaluate("document.querySelector('#map-stats').textContent"),/未取得/);
    assert.equal(await evaluate("document.querySelectorAll('.pin').length"),0);
    assert.equal(await evaluate("localStorage.length+sessionStorage.length"),0);
-   await evaluate("document.querySelector('#firebase-login').click()");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 3件')"),'relogin restoration');
-   await evaluate("window.__displayTest.setMode('cached')");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('未取得')"),'cached snapshot clear');
+   await evaluate("document.querySelector('#firebase-login').click()");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 3件')"),'relogin restoration');await assertScope(true);
+   await evaluate("window.__displayTest.setMode('cached')");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('未取得')"),'cached snapshot clear');await assertScope(false);
    assert.equal(await evaluate("document.body.textContent.includes('PRIVATE_MARKER')"),false);
    await evaluate("window.__displayTest.setMode('populated')");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('読込案件 3件')"),'fresh snapshot restoration');
-   await evaluate("window.__displayTest.setMode('denied')");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('未取得')"),'denial clear');
+   await evaluate("window.__displayTest.setMode('denied')");await until(()=>evaluate("document.querySelector('#map-stats').textContent.includes('未取得')"),'denial clear');await assertScope(false);
    assert.equal(await evaluate("document.body.textContent.includes('PRIVATE_MARKER')"),false);
-   results.push({width,status:'PASS',checks:['unread versus empty','evidence stages','unknown locations/no pins','minute precision','map filtering/detail','no viewport overflow','logout clears DOM/forms/listeners including delayed snapshots','relogin','cached snapshot clear and fresh restoration','permission failure clear','no browser storage']});
+   results.push({width,status:'PASS',checks:['scope badge and footer follow private/public visibility','unread versus empty','evidence stages','unknown locations/no pins','minute precision','map filtering/detail','no viewport overflow','logout clears DOM/forms/listeners including delayed snapshots','relogin','cached snapshot clear and fresh restoration','permission failure clear','no browser storage']});
   }
   assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'results.json'),JSON.stringify({kind:'LOCAL_CHROME_SYNTHETIC_SDK_ONLY',realFirebaseRequests:0,namespace:testOnly?'synthetic':'real',results,uncaughtErrors:errors},null,2));console.log(JSON.stringify({pass:results.length,fail:0,widths:results.map(r=>r.width),output}));
  }finally{ws?.close();chrome?.kill('SIGTERM');if(server)await new Promise(r=>server.close(r));await wait(100);fs.rmSync(profile,{recursive:true,force:true});}

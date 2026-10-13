@@ -67,7 +67,7 @@
   window.RoyOutboundView = {
     clear,
     open(index) { const c = cases[index]; if(c) { const card=createCard(c, index); card.id=`detail-case-${index}`; window.RoyDashboard.open(card); } },
-    show(payload, source) { clear(); cases=OutboundModel.parse(payload); el('private-outbound').hidden=false;el('clear-outbound').disabled=false;el('import-status').textContent=source;window.RoyDashboard?.source(source);render();el('outbound-results').textContent=el('outbound-results').textContent.replace('端末内の正本',source); },
+    show(payload, source, scope) { clear(); cases=OutboundModel.parse(payload); el('private-outbound').hidden=false;el('clear-outbound').disabled=false;el('import-status').textContent=source;window.RoyDashboard?.source(source,scope);render();el('outbound-results').textContent=el('outbound-results').textContent.replace('端末内の正本',source); },
     summary(data) {
       if (!data) {el('revenue').textContent='—';el('summary').textContent='Firestoreの現在値は不明です。';el('sales-source').textContent='接続と権限を確認してください。';el('sales-metrics').replaceChildren(node('p','Firestoreの公開集計を確認できません。現在値は不明です。'));return;}
       el('sales-metrics').replaceChildren(metric('営業案件',`${data.caseCount}件`,`目標：${data.targetCount}件`),metric('人の判断待ち',`${data.readyCount}件`,'READY_FOR_HUMAN_GO'),metric('送信済み',`${data.sentCount}件`,`準備中 ${data.preparingCount}件・受注とは別`),metric('確認済み売上',`$${data.confirmedRevenueUsd}`,'案件数は売上ではありません'));

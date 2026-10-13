@@ -65,7 +65,7 @@ try {
         el('firebase-save').disabled=value?.mode!=='firestore';
       },
       show(payload){
-        window.RoyOutboundView.show(payload,config.testOnly?'架空データ試験（実績ではありません）':'Firestore参照（正本切替は別途確認）');
+        window.RoyOutboundView.show(payload,config.testOnly?'架空データ試験（実績ではありません）':'Firestore参照（正本切替は別途確認）',config.testOnly?'synthetic':'private');
         el('firebase-test-summary').hidden=!(config.testOnly||perCase);
         if(perCase){const sent=payload.cases.filter(c=>c.sent).length,ready=payload.cases.filter(c=>!c.sent&&c.status==='READY_FOR_HUMAN_GO').length;el('firebase-test-summary').textContent=`管理者内の集計：${payload.cases.length}件・送信済み${sent}・READY ${ready}・準備中${payload.cases.length-sent-ready}`;}
         el('firebase-editor').hidden=payload.cases.length===0;
