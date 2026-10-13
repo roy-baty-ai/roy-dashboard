@@ -18,3 +18,10 @@ test('Okinawa and main-island representative positions fit their map frames',()=
   assert.ok(x>20&&x<176&&y>340&&y<498);
   for(const region of ['北海道','東京都','福岡県','鹿児島県']){const p=locate({region}),[x,y]=project(p.longitude,p.latitude);assert.ok(x>=0&&x<=720&&y>=0&&y<=530,region);}
 });
+test('municipality representative points require explicit provenance and never imply a street address',()=>{
+ const location={longitude:139.7,latitude:35.7,basis:'municipality',label:'架空市の代表点',source_url:'https://example.invalid/public-reference',verified_at:'2026-10-13T00:00:00Z'};
+ const row=p=>parse([{businessName:'架空',region:'東京都',location:p}])[0];
+ assert.match(locate(row(location)).basis,/事業所の位置ではありません/);assert.equal(locate(row(location)).label,'架空市の代表点');
+ for(const patch of [{label:''},{source_url:null},{source_url:'javascript:alert(1)'},{verified_at:'unknown'}])assert.equal(locate(row({...location,...patch})),null);
+ assert.equal(locate(row({...location,latitude:50})),null);
+});

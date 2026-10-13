@@ -32,3 +32,20 @@ test('snapshot schema preserves gates, image references, supplemental origin and
   assert.equal(sent.state, 'sent'); assert.equal(sent.imageUrl, null); assert.equal(sent.imageRef, 'libfile_test'); assert.equal(sent.body, '履歴本文');
   assert.equal(prep.state, 'preparing'); assert.equal(prep.previewUrl, null); assert.ok(prep.remaining.includes('Gmail未確認')); assert.match(prep.canonicalNote, /未収録/);
 });
+test('sales evidence separates interested, declined, contracted and paid without inferring revenue',()=>{
+ const base={business_name:'架空検証',sent:true,status:'SENT_WAITING',email:{},missing_gates:[],confirmed_gates:[],confirmed_revenue_usd:0};
+ const one=patch=>parse({schema_version:1,cases:[{...base,...patch}]})[0];
+ for(const stage of ['interested','declined','contracted']){const c=one({sales:{stage,evidence:'架空の確認証拠'}});assert.equal(c.salesStage,stage);assert.equal(c.state,'sent');assert.equal(c.confirmedRevenueUsd,0);}
+ assert.equal(one({sales:{stage:'paid',evidence:'架空の確認証拠'}}).salesStage,'sent');
+ assert.equal(one({sales:{stage:'paid',evidence:'架空の確認証拠'},confirmed_revenue_usd:100}).salesStage,'paid');
+ assert.equal(one({sales:{stage:'contracted'}}).salesStage,'sent');
+ assert.equal(one({confirmed_revenue_usd:undefined,offer:{amount:99999}}).confirmedRevenueUsd,null);
+ assert.equal(one({sent:false,status:'NOT_READY',sales:{stage:'hold',evidence:'適合確認待ち'}}).salesStage,'hold');
+ assert.equal(one({sent:false,status:'NOT_READY',sales:{stage:'paid',evidence:'矛盾した証拠'},confirmed_revenue_usd:10}).salesStage,'candidate');
+ const {matches}=require('../outbound-model.js');assert.equal(matches(one({sales:{stage:'interested',evidence:'確認'}}),'sales:interested'),true);assert.equal(matches(one({sales:{stage:'interested',evidence:'確認'}}),'sent'),true);
+});
+
+test('missing or unrecognized stage is unknown, not a confirmed candidate',()=>{
+ for(const status of [undefined,'MISSING_SOURCE'])assert.equal(parse([{businessName:'架空',status}])[0].salesStage,'unknown');
+ assert.equal(parse([{businessName:'架空',status:'NOT_READY'}])[0].salesStage,'candidate');
+});

@@ -8,7 +8,7 @@
   const embedded = window.RoyPrivateSnapshot;
   function metric(label, value, detail) { const box = node('div', '', 'sales-metric'); box.append(node('span', label), node('strong', value), node('small', detail)); return box; }
   (window.RoyPrivateSnapshot ? Promise.resolve(window.RoyPrivateSnapshot.summary) : fetch('outbound-summary.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw Error(); return r.json(); })).then(data => {
-    if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyFirebaseConfig.testOnly && !embedded) return;
+    if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyFirebaseConfig.testOnly && window.RoyFirebaseConfig.storageVersion!==2 && !embedded) return;
     if (!['candidateCount', 'readyCount', 'preparingCount', 'sentCount', 'targetCount', 'confirmedRevenueUsd'].every(k => Number.isFinite(data[k]) && data[k] >= 0) || data.candidateCount !== data.readyCount + data.preparingCount + data.sentCount) throw Error();
     el('sales-metrics').replaceChildren(metric('営業案件', `${data.candidateCount}件`, `目標：見本付きの強い${data.targetCount}件`), metric('人の判断待ち', `${data.readyCount}件`, 'READY_FOR_HUMAN_GO'), metric('送信済み', `${data.sentCount}件`, `準備中 ${data.preparingCount}件・受注とは別`), metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '収益目標は本業の状況を参照'));
     el('sales-source').textContent = `${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
@@ -17,8 +17,8 @@
   function linkField(dl, label, url) { const dd = node('dd', '未登録・要確認'); if (url) { const a = node('a', url); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; dd.replaceChildren(embedded ? node('span', url) : a); } dl.append(node('dt', label), dd); }
   function createCard(c, index) {
         const card = node('article', '', 'case-card'); card.id = `case-${index}`; const head = node('div', '', 'case-heading');
-        head.append(node('h4', c.businessName), node('span', labels[c.state], `badge ${c.state === 'ready' ? 'good' : c.state === 'sent' ? 'blue' : 'notice'}`));
-        const dl = node('dl', '', 'case-fields'); field(dl, '分類', c.category); if (c.roleLabel) field(dl, '案件区分', c.roleLabel); if (c.region) field(dl, '地域', c.region); field(dl, '提案価値', c.value); field(dl, '準備状況', c.preparation); field(dl, '正本の状態', c.sourceStatus); linkField(dl, '公開見本URL', c.previewUrl); if (c.previewNote) field(dl, '見本の確認状況', c.previewNote);
+        head.append(node('h4', c.businessName), node('span', c.salesLabel||labels[c.state], `badge ${c.state === 'ready' ? 'good' : c.state === 'sent' ? 'blue' : 'notice'}`));
+        const dl = node('dl', '', 'case-fields'); field(dl, '営業段階', c.salesLabel); field(dl, '段階の根拠', c.salesEvidence); if(c.salesCheckedAt)field(dl, '段階の確認日時', date(c.salesCheckedAt)); const place=window.RoyGeography?.locate(c); if(place){field(dl, '地図の位置精度', place.basis);if(place.sourceUrl)linkField(dl,'位置の公開出典',place.sourceUrl);} field(dl, '確認済み売上', c.confirmedRevenueUsd===null?'未取得・未確認':`$${c.confirmedRevenueUsd}`); field(dl, '分類', c.category); if (c.roleLabel) field(dl, '案件区分', c.roleLabel); if (c.region) field(dl, '地域', c.region); field(dl, '提案価値', c.value); field(dl, '準備状況', c.preparation); field(dl, '正本の状態', c.sourceStatus); linkField(dl, '公開見本URL', c.previewUrl); if (c.previewNote) field(dl, '見本の確認状況', c.previewNote);
         if (c.imageRef) field(dl, '営業画像', `添付参照・未取得／未プレビュー\n${c.imageName}\n${c.imageRef}\n記録上の承認状態：${c.imageApproval || '未記録'}`); else linkField(dl, '営業画像', c.imageUrl); field(dl, '宛先', c.recipient); field(dl, '最終確認', date(c.verifiedAt)); if (c.checkedNote) field(dl, '確認時点の注意', c.checkedNote);
         if (c.offer) field(dl, '提案価格', c.offer); if (c.offerScope) field(dl, '提案範囲', c.offerScope); if (c.nextAction) field(dl, '次の作業', c.nextAction); if (c.canonicalNote) field(dl, '正本への収録', c.canonicalNote);
         if (c.sentAt) field(dl, '初回送信日時', date(c.sentAt)); if (c.sentMessageUrl) linkField(dl, '送信済み記録', c.sentMessageUrl); if (c.replyNote) field(dl, '送信・返信', c.replyNote);
@@ -29,7 +29,7 @@
   }
   function render() {
     const query = el('outbound-search').value.toLocaleLowerCase().trim();
-    const selected = cases.filter(c => (el('outbound-filter').value === 'all' || c.state === el('outbound-filter').value) && [c.businessName, c.category, c.value, c.region || ''].some(v => v.toLocaleLowerCase().includes(query)));
+    const selected = cases.filter(c => OutboundModel.matches(c,el('outbound-filter').value) && [c.businessName, c.category, c.value, c.region || ''].some(v => v.toLocaleLowerCase().includes(query)));
     el('outbound-results').textContent = `端末内の正本：${cases.length}件 / 表示：${selected.length}件（READY ${cases.filter(c => c.state === 'ready').length}・準備中 ${cases.filter(c => c.state === 'preparing').length}・送信済み ${cases.filter(c => c.state === 'sent').length}）。公開概要とは別の読込結果です。`;
     const classification = new Map(); const roles = new Map();
     for (const c of cases) { classification.set(c.category || '未分類', (classification.get(c.category || '未分類') || 0) + 1); if (c.role) roles.set(c.role, (roles.get(c.role) || 0) + 1); }
