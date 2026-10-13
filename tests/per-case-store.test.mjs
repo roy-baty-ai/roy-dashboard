@@ -18,7 +18,7 @@ test('synthetic probe rejects real mode before accessing SDK',async()=>{
 });
 test('existing non-admin probe performs only reads and reports each denial',async()=>{
  const {probeSyntheticDenials}=await import('../firebase/live-verification.mjs');const paths=[],reported=[];
- const sdk={initializeFirestore:()=> 'db',memoryLocalCache:()=> 'memory',doc:(_,p)=>p,runTransaction:async(_,fn)=>fn({get:async p=>{paths.push(p);throw Object.assign(Error('denied'),{code:'permission-denied'});},set:()=>assert.fail('non-admin write')})};
+ const sdk={getFirestore:()=> 'db',doc:(_,p)=>p,runTransaction:async(_,fn)=>fn({get:async p=>{paths.push(p);throw Object.assign(Error('denied'),{code:'permission-denied'});},set:()=>assert.fail('non-admin write')})};
  const result=await probeSyntheticDenials(sdk,{}, {currentUser:{uid:'existing-non-admin'}},{space:'synthetic',testOnly:true,onResult:r=>reported.push(r)});
  assert.equal(result.writeAttempts,0);assert.equal(paths.length,3);assert.ok(paths.every(p=>p.startsWith('privateRoy/synthetic/')));assert.deepEqual(reported.map(r=>r.result),['PASS','PASS','PASS','NOTRUN']);
  sdk.runTransaction=async(_,fn)=>fn({get:async()=>({})});await assert.rejects(probeSyntheticDenials(sdk,{}, {currentUser:{uid:'existing-non-admin'}},{space:'synthetic',testOnly:true}),/STOP/);
@@ -30,7 +30,7 @@ test('visible verification is synthetic-only and contains no admin write probe (
 test('Roy denial probe writes only synthetic case/history and stops on unexpected allow',async()=>{
  const {probeSyntheticDenials}=await import('../firebase/live-verification.mjs');const writes=[],reported=[];let allow=false;
  const record={revision:1,source:{intakeId:'fixture'},payload:{next_action:'old',email:{body:'original'}}};
- const sdk={initializeFirestore:app=>app.anon?'anon':'roy',memoryLocalCache:()=> 'memory',doc:(_,p)=>p,serverTimestamp:()=> 'time',initializeApp:()=>({anon:true}),getAuth:()=>({}),setPersistence:async()=>{},inMemoryPersistence:'memory',async runTransaction(db,fn){const pending=[];const out=await fn({get:async p=>{if(db==='anon')throw Object.assign(Error('denied'),{code:'permission-denied'});return {exists:()=>true,data:()=>p.endsWith('control/state')?{mode:'active'}:record};},set:(p,v)=>pending.push([p,v])});if(pending.length){writes.push(...pending);if(!allow)throw Object.assign(Error('denied'),{code:'permission-denied'});}return out;}};
+ const sdk={getFirestore:()=> 'roy',initializeFirestore:app=>{assert.equal(app.anon,true);return 'anon';},memoryLocalCache:()=> 'memory',doc:(_,p)=>p,serverTimestamp:()=> 'time',initializeApp:()=>({anon:true}),getAuth:()=>({}),setPersistence:async()=>{},inMemoryPersistence:'memory',async runTransaction(db,fn){const pending=[];const out=await fn({get:async p=>{if(db==='anon')throw Object.assign(Error('denied'),{code:'permission-denied'});return {exists:()=>true,data:()=>p.endsWith('control/state')?{mode:'active'}:record};},set:(p,v)=>pending.push([p,v])});if(pending.length){writes.push(...pending);if(!allow)throw Object.assign(Error('denied'),{code:'permission-denied'});}return out;}};
  const result=await probeSyntheticDenials(sdk,{options:{}},{currentUser:{uid:ROY_UID}},{space:'synthetic',testOnly:true,onResult:r=>reported.push(r)});
  assert.equal(result.revisionUnchanged,true);assert.equal(writes.length,3);assert.ok(writes.every(([p])=>/^privateRoy\/synthetic\/cases\/roy-web-0001(?:\/history\/2)?$/.test(p)));assert.equal(reported.filter(r=>r.result==='PASS').length,6);
  allow=true;writes.length=0;await assert.rejects(probeSyntheticDenials(sdk,{options:{}},{currentUser:{uid:ROY_UID}},{space:'synthetic',testOnly:true}),/STOP/);assert.equal(writes.length,1);
@@ -55,3 +55,44 @@ test('exact checked-in synthetic fixture builds four atomic new documents and re
  const {mkdtemp,readFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');const dir=await mkdtemp(join(tmpdir(),'roy-synthetic-'));
  try{const path=join(dir,'fixture.json');execFileSync(process.execPath,[new URL('../scripts/create-synthetic-intake.mjs',import.meta.url).pathname,path]);const m=JSON.parse(await readFile(path,'utf8'));assert.equal(m.manifestHash,'7b5b9fb554decc7b73364043327e3b91fbc2fa7dc515b800364ff4b56763f622');const f=fake();await f.store.ingest(m);assert.equal(f.batches.length,1);assert.equal(f.batches[0].length,4);assert.equal(f.stagingBatches.length,9);assert.ok(f.stagingBatches.every(b=>b.length===1&&b[0][0].includes('/validation/')));const [r]=await f.store.readback(m);assert.equal(r.revision,1);await f.store.ingest(m);assert.equal(f.batches.length,1);}finally{await rm(dir,{recursive:true,force:true});}
 });
+
+for(const source of ['../firebase/sdk-entry.js','../vendor/firebase-sdk.js']){
+ test(`denial probe reuses real SDK Firestore and initializes anonymous memory cache (${source})`,async()=>{
+  const real=await import(source);
+  const app=real.initializeApp({projectId:'demo-roy-local',apiKey:'fake-api-key',appId:'fake-app-id'},`initialization-regression-${source}`);
+  const db=real.initializeFirestore(app,{localCache:real.memoryLocalCache()});
+  // Reproduce the SDK precondition that the old mocks concealed, without network I/O.
+  assert.throws(()=>real.initializeFirestore(app,{localCache:real.memoryLocalCache()}),{code:'failed-precondition'});
+  const record={revision:1,source:{intakeId:'fixture'},payload:{next_action:'old',email:{body:'original'}}};
+  const reported=[],anonymousDatabases=[];
+  const sdk={...real,
+   initializeFirestore(target,options){
+    const database=real.initializeFirestore(target,options);
+    assert.notEqual(target,app,'the existing app must use getFirestore');
+    assert.equal(options.localCache.kind,'memory');
+    anonymousDatabases.push(database);return database;
+   },
+   // Only database operations are stubbed: app/auth/cache initialization and doc are real SDK calls.
+   async runTransaction(database,fn){
+    assert.ok(database===db||anonymousDatabases.includes(database));
+    let writes=0;
+    const out=await fn({
+     async get(ref){
+      assert.equal(ref.firestore,database);
+      if(database!==db)throw Object.assign(Error('denied'),{code:'permission-denied'});
+      return {exists:()=>true,data:()=>ref.path.endsWith('control/state')?{mode:'active'}:record};
+     },
+     set(){writes++;}
+    });
+    if(writes)throw Object.assign(Error('denied'),{code:'permission-denied'});
+    return out;
+   }
+  };
+  const {probeSyntheticDenials}=await import('../firebase/live-verification.mjs');
+  const result=await probeSyntheticDenials(sdk,app,{currentUser:{uid:ROY_UID}},{space:'synthetic',testOnly:true,onResult:r=>reported.push(r)});
+  assert.equal(real.getFirestore(app),db);
+  assert.equal(anonymousDatabases.length,1);
+  assert.equal(result.revisionUnchanged,true);
+  assert.equal(reported.filter(r=>r.result==='PASS').length,6);
+ });
+}
