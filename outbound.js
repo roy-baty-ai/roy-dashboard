@@ -4,15 +4,27 @@
   const node = (tag, value, className) => { const n = document.createElement(tag); n.textContent = value; if (className) n.className = className; return n; };
   const labels = { ready: 'READY_FOR_HUMAN_GO', preparing: '準備中・要確認', sent: '送信済み' };
   const date = value => value ? new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) + ' JST' : '未記録・要確認';
-  let cases = [], importVersion = 0;
+  let cases = [], importVersion = 0, publicSummary = null, privateMetrics = null;
   const embedded = window.RoyPrivateSnapshot;
   function metric(label, value, detail) { const box = node('div', '', 'sales-metric'); box.append(node('span', label), node('strong', value), node('small', detail)); return box; }
   (window.RoyPrivateSnapshot ? Promise.resolve(window.RoyPrivateSnapshot.summary) : fetch('outbound-summary.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw Error(); return r.json(); })).then(data => {
     if (window.RoyFirebaseConfig?.enabled && !window.RoyFirebaseConfig.authOnly && !window.RoyFirebaseConfig.testOnly && window.RoyFirebaseConfig.storageVersion!==2 && !embedded) return;
     if (!['candidateCount', 'readyCount', 'preparingCount', 'sentCount', 'targetCount', 'confirmedRevenueUsd'].every(k => Number.isFinite(data[k]) && data[k] >= 0) || data.candidateCount !== data.readyCount + data.preparingCount + data.sentCount) throw Error();
+    publicSummary=data;renderMetrics();
+  }).catch(() => { publicSummary=null;renderMetrics(); });
+  function renderMetrics() {
+    if(privateMetrics!==null){
+      const {count,ready,preparing,sent,revenue,source}=privateMetrics;
+      el('sales-metrics').replaceChildren(metric('営業案件',`${count}件`,'管理者画面に読み込んだ案件'),metric('人の判断待ち',`${ready}件`,'READY_FOR_HUMAN_GO'),metric('送信済み',`${sent}件`,`準備中 ${preparing}件・受注とは別`),metric('確認済み売上',revenue===null?'未取得':`$${revenue}`,revenue===null?'未取得の案件あり・合計未確定':'読込案件の確認済み売上'));
+      el('sales-source').textContent=`${source}。現在読み込んだ${count}案件の集計です。公開概要・全事業の送信総数とは別です。`;
+      return;
+    }
+    const data=publicSummary;
+    if(!data){el('sales-metrics').replaceChildren(node('p','公開概要は未取得です。件数・売上は不明です。'));el('sales-source').textContent='公開概要を取得できるまで件数・売上は未確認です。';return;}
     el('sales-metrics').replaceChildren(metric('営業案件', `${data.candidateCount}件`, `目標：見本付きの強い${data.targetCount}件`), metric('人の判断待ち', `${data.readyCount}件`, 'READY_FOR_HUMAN_GO'), metric('送信済み', `${data.sentCount}件`, `準備中 ${data.preparingCount}件・受注とは別`), metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '収益目標は本業の状況を参照'));
-    el('sales-source').textContent = `${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
-  }).catch(() => { el('sales-metrics').replaceChildren(node('p', '営業概要を読み込めません。件数・売上は不明です。')); el('sales-source').textContent = '再読み込みして確認してください。'; });
+    el('sales-source').textContent = `${embedded?'同梱資料の概要':'公開概要'}：${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
+  }
+
   function field(dl, label, content) { dl.append(node('dt', label), node('dd', content || '未記録・要確認')); }
   function linkField(dl, label, url) { const dd = node('dd', '未登録・要確認'); if (url) { const a = node('a', url); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; dd.replaceChildren(embedded ? node('span', url) : a); } dl.append(node('dt', label), dd); }
   function createCard(c, index) {
@@ -48,7 +60,7 @@
     }
     window.RoyDashboard?.cases(cases, selected);
   }
-  function clear() { el('private-context').textContent = ''; window.RoyDashboard?.clear(); ++importVersion; cases = []; el('outbound-file').value = ''; el('outbound-search').value = ''; el('outbound-filter').value = 'all'; el('outbound-cases').replaceChildren(); el('outbound-results').textContent = ''; el('classification-counts').textContent = ''; el('case-index').replaceChildren(); el('private-outbound').hidden = true; el('clear-outbound').disabled = true; el('import-status').textContent = '内部データ未読込。事業者名・宛先・営業本文は非公開です。'; }
+  function clear() { privateMetrics=null;renderMetrics();el('private-context').textContent = ''; window.RoyDashboard?.clear(); ++importVersion; cases = []; el('outbound-file').value = ''; el('outbound-search').value = ''; el('outbound-filter').value = 'all'; el('outbound-cases').replaceChildren(); el('outbound-results').textContent = ''; el('classification-counts').textContent = ''; el('case-index').replaceChildren(); el('private-outbound').hidden = true; el('clear-outbound').disabled = true; el('import-status').textContent = '内部データ未読込。事業者名・宛先・営業本文は非公開です。'; }
   el('outbound-file').addEventListener('change', async event => {
     const file = event.target.files[0]; clear(); if (!file) return; const version = importVersion;
     try { if (file.size > 2 * 1024 * 1024) throw Error('2MB以下のJSONを選択してください。'); const contents = await file.text(); if (version !== importVersion) return; cases = OutboundModel.parse(JSON.parse(contents)); el('private-outbound').hidden = false; el('clear-outbound').disabled = false; el('import-status').textContent = `${cases.length}件を端末内で表示中。公開・QA・Gmail確認と日時が揃わない案件は準備中として表示します。`; render(); }
@@ -67,7 +79,7 @@
   window.RoyOutboundView = {
     clear,
     open(index) { const c = cases[index]; if(c) { const card=createCard(c, index); card.id=`detail-case-${index}`; window.RoyDashboard.open(card); } },
-    show(payload, source, scope) { clear(); cases=OutboundModel.parse(payload); el('private-outbound').hidden=false;el('clear-outbound').disabled=false;el('import-status').textContent=source;window.RoyDashboard?.source(source,scope);render();el('outbound-results').textContent=el('outbound-results').textContent.replace('端末内の正本',source); },
+    show(payload, source, scope) { clear(); cases=OutboundModel.parse(payload); el('private-outbound').hidden=false;el('clear-outbound').disabled=false;el('import-status').textContent=source;window.RoyDashboard?.source(source,scope);privateMetrics={count:cases.length,ready:cases.filter(c=>c.state==='ready').length,preparing:cases.filter(c=>c.state==='preparing').length,sent:cases.filter(c=>c.state==='sent').length,revenue:cases.every(c=>c.confirmedRevenueUsd!==null)?cases.reduce((sum,c)=>sum+c.confirmedRevenueUsd,0):null,source};renderMetrics();render();el('outbound-results').textContent=el('outbound-results').textContent.replace('端末内の正本',source); },
     summary(data) {
       if (!data) {el('revenue').textContent='—';el('summary').textContent='Firestoreの現在値は不明です。';el('sales-source').textContent='接続と権限を確認してください。';el('sales-metrics').replaceChildren(node('p','Firestoreの公開集計を確認できません。現在値は不明です。'));return;}
       el('sales-metrics').replaceChildren(metric('営業案件',`${data.caseCount}件`,`目標：${data.targetCount}件`),metric('人の判断待ち',`${data.readyCount}件`,'READY_FOR_HUMAN_GO'),metric('送信済み',`${data.sentCount}件`,`準備中 ${data.preparingCount}件・受注とは別`),metric('確認済み売上',`$${data.confirmedRevenueUsd}`,'案件数は売上ではありません'));
