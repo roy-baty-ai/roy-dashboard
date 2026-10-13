@@ -4,7 +4,7 @@ import {ROY_UID,digest} from './intake.mjs';
 export async function probeSyntheticDenials(sdk,app,auth,{space,testOnly,onResult=()=>{}}={}){
  if(space!=='synthetic'||testOnly!==true)throw Error('Synthetic mode required');
  const startingUid=auth.currentUser?.uid;if(!startingUid)throw Error('Existing signed-in session required');
- const base='privateRoy/synthetic',db=sdk.initializeFirestore(app,{localCache:sdk.memoryLocalCache()}),ref=p=>sdk.doc(db,p),results=[];
+ const base='privateRoy/synthetic',db=sdk.getFirestore(app),ref=p=>sdk.doc(db,p),results=[];
  const report=r=>{results.push(r);onResult(r);};
  async function denied(check,fn){
   if(auth.currentUser?.uid!==startingUid)throw Error('Session changed; verification stopped');
