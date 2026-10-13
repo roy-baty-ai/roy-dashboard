@@ -73,3 +73,22 @@ test('rejected sales evidence cannot masquerade as a reply or payment record',()
  assert.equal(one({stage:'sent',evidence:'送信の証跡のみ'}).hasFollowupEvidence,false);
  assert.equal(one({stage:'interested',evidence:'関心返信の証跡'}).hasFollowupEvidence,true);
 });
+
+
+test('offline private builder labels the stable footer as private with synthetic input',()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFileSync}=require('node:child_process');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'roy-private-label-'));
+ try{
+  const input=path.join(dir,'synthetic.json'),output=path.join(dir,'private.html');
+  const fixture={schema_version:1,assembled_at_utc:'2026-10-13T00:00:00Z',evidence_note:'Synthetic fixture only',cases:[{id:'roy-web-0001',business_name:'SYNTHETIC_PRIVATE_LABEL_MARKER'}],summary:{case_count:1,ready_for_human_go:0,unsent_cases_in_this_view:1,sent_cases_in_this_view:0,operating_revenue_usd_last_recorded:0}};
+  fs.writeFileSync(input,JSON.stringify(fixture));
+  for(const flags of [[],['--demo']]){
+   execFileSync('python3',[path.resolve(__dirname,'../scripts/build-private.py'),'--input',input,'--output',output,...flags]);
+   const html=fs.readFileSync(output,'utf8'),footer=html.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/)?.[1];
+   assert.ok(html.includes('window.RoyPrivateSnapshot = '));assert.ok(html.includes('SYNTHETIC_PRIVATE_LABEL_MARKER'));
+   assert.match(footer,/<span id="footer-data-scope">PRIVATE SNAPSHOT · DO NOT PUBLISH<\/span>/);
+   assert.doesNotMatch(footer,/PUBLIC SUMMARY|PUBLIC STATUS|PRIVATE DATA EXCLUDED|PRIVATE DATA NOT DISPLAYED/);
+   assert.equal(fs.statSync(output).mode&0o777,0o600);
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
