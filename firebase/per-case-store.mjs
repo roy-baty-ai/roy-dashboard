@@ -37,24 +37,43 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
     tx.set(ref(`${base}/cases/${id}`),record);tx.set(ref(`${base}/cases/${id}/history/${record.revision}`),{record});
    });
   },
-  async ingest(input){
-   const user=uid(),m=await verifyIntake(input,{space}),receipt=intakeReceipt(m);
+  async ingest(input,{onStage=()=>{}}={}){
+   onStage('session-check');const user=uid();onStage('manifest-check');const m=await verifyIntake(input,{space}),receipt=intakeReceipt(m);
    // One bounded transaction per case. A partial intake is resumable; it is never reported as fully imported.
    const outcomes=[];
-   for(const e of m.entries)outcomes.push(await sdk.runTransaction(db,async tx=>{
+   for(const e of m.entries){onStage('transaction-start');outcomes.push(await sdk.runTransaction(db,async tx=>{
+    onStage('transaction-read');
     const [control,index,intake,current]=await Promise.all([tx.get(ref(`${base}/control/state`)),tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/intakes/${m.manifestHash}`)),tx.get(ref(`${base}/cases/${e.caseId}`))]);
+    onStage('transaction-validate');
     if(control.data()?.mode!=='active'||control.data()?.allowSourceIngest!==true)throw Error('Source ingestion paused');
     if(intake.exists()&&canonicalJSON(intake.data())!==canonicalJSON(receipt))throw Error('Intake receipt collision');
     const result=sourceRecord(current.exists()?current.data():null,e,m);
     if(result.unchanged)return {caseId:e.caseId,status:'unchanged',revision:current.data().revision};
     const ids=index.exists()?[...index.data().caseIds]:[];if(!ids.includes(e.caseId))ids.push(e.caseId);if(ids.length>50)throw Error('Case registry limit');
+    onStage('transaction-build');
     if(!intake.exists())tx.set(ref(`${base}/intakes/${m.manifestHash}`),receipt);
     if(!index.exists()||ids.length!==index.data().caseIds.length)tx.set(ref(`${base}/registry/current`),{caseIds:ids,revision:(index.data()?.revision||0)+1,intakeId:m.manifestHash,updatedBy:user,updatedAt:sdk.serverTimestamp()});
     const record={...result.record,updatedBy:user,updatedAt:sdk.serverTimestamp()};
     tx.set(ref(`${base}/cases/${e.caseId}`),record);tx.set(ref(`${base}/cases/${e.caseId}/history/${record.revision}`),{record});
-    return {caseId:e.caseId,status:'written',revision:record.revision};
-   }));
+    onStage('transaction-commit');return {caseId:e.caseId,status:'written',revision:record.revision};
+   }));}
    return {manifestHash:m.manifestHash,outcomes,readbackRequired:true};
+  },
+  async inspectSynthetic(input){
+   if(space!=='synthetic')throw Error('Synthetic mode required');
+   uid();const m=await verifyIntake(input,{space});
+   return sdk.runTransaction(db,async tx=>{
+    const [control,index,intake]=await Promise.all([tx.get(ref(`${base}/control/state`)),tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/intakes/${m.manifestHash}`))]);
+    const cases=[];
+    for(const e of m.entries){
+     const snap=await tx.get(ref(`${base}/cases/${e.caseId}`));
+     if(!snap.exists()){cases.push({caseId:e.caseId,exists:false});continue;}
+     const r=snap.data(),revision=Number.isSafeInteger(r.revision)&&r.revision>0&&r.revision<=1000000?r.revision:null;
+     const h=revision===null?null:await tx.get(ref(`${base}/cases/${e.caseId}/history/${revision}`));
+     cases.push({caseId:e.caseId,exists:true,revision,historyExists:h?.exists()===true,sourceMatches:r.source?.intakeId===m.manifestHash&&r.source?.hash===e.sourceHash&&r.source?.version===e.sourceVersion});
+    }
+    return {controlExists:control.exists(),controlActive:control.data()?.mode==='active',sourceIngestAllowed:control.data()?.allowSourceIngest===true,registryExists:index.exists(),registryIncludesCases:Array.isArray(index.data()?.caseIds)&&m.entries.every(e=>index.data().caseIds.includes(e.caseId)),receiptExists:intake.exists(),receiptMatches:intake.exists()&&canonicalJSON(intake.data())===canonicalJSON(intakeReceipt(m)),cases};
+   });
   },
   async readback(input){
    uid();const m=await verifyIntake(input,{space});
