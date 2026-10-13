@@ -1,12 +1,13 @@
+import {ingestAndVerify,inspectAndVerify,safeFailure} from './intake-diagnostics.mjs';
 import { validateConfig, createStore, prepareImport } from './store.mjs';
 import { TEST_SOURCE_HASHES } from './test-mode.mjs';
 import { createSession } from './session.mjs';
 import { createPerCaseStore } from './per-case-store.mjs';
-import { verifyIntake } from './intake.mjs';
+import { verifyIntake,ROY_UID } from './intake.mjs';
 import { probeSyntheticDenials } from './live-verification.mjs';
 const el=id=>document.getElementById(id), config=window.RoyFirebaseConfig;
 const perCase=config?.storageVersion===2;
-let session, stopPublic=()=>{}, stopProbeAuth=()=>{}, probeGeneration=0, sourceControl=null, pendingImport=null, selectedCase=null, importGeneration=0;
+let inspectButton, inspectFile, session, stopPublic=()=>{}, stopProbeAuth=()=>{}, probeGeneration=0, sourceControl=null, pendingImport=null, selectedCase=null, importGeneration=0;
 const state=message=>{ el('firebase-status').textContent=(config?.testOnly?'架空データ試験：':'')+message; };
 try {
   if (!validateConfig(config) || window.RoyPrivateSnapshot) state('Firebase未接続：正本は従来のJSONです。接続先と権限の承認後に有効化します。');
@@ -46,11 +47,20 @@ try {
         finally{if(generation===probeGeneration)button.disabled=!auth.currentUser;}
       };
     }
+    if(perCase&&config.testOnly===true){
+      const section=document.createElement('section'),label=document.createElement('label');label.textContent='読取り専用診断用の架空ファイル';inspectFile=document.createElement('input');inspectFile.type='file';inspectFile.accept='.json,application/json';inspectFile.id='firebase-inspect-file';label.append(inspectFile);inspectButton=document.createElement('button');inspectButton.type='button';inspectButton.id='firebase-import-inspect';inspectButton.textContent='保存せずサーバー記録を確認';inspectButton.disabled=true;const output=document.createElement('p');output.id='firebase-inspect-result';output.setAttribute('role','status');section.append(label,inspectButton,output);el('firebase-panel').append(section);inspectFile.onchange=()=>{pendingImport=null;importGeneration++;el('firebase-import-save').disabled=true;inspectButton.disabled=auth.currentUser?.uid!==ROY_UID||!inspectFile.files[0];el('firebase-inspect-result').textContent='';el('firebase-import-result').textContent='';};
+      inspectButton.onclick=async()=>{
+        const generation=importGeneration;inspectButton.disabled=true;
+        try{const file=inspectFile.files[0]||el('firebase-import-file').files[0];if(!file||file.size>1000000)throw Error('Fixture required');const manifest=await verifyIntake(JSON.parse(await file.text()),{space:'synthetic'});const result=await inspectAndVerify(store,manifest);if(generation!==importGeneration)return;el('firebase-inspect-result').textContent=result.ok?(result.verified?'読取のみ：原本hash・履歴を照合済み。今回の保存で作成されたかは未判定。':'読取のみ：必要な文書が揃っていません。')+JSON.stringify(result.observation):`読取失敗・照合未完了：${result.stage} / ${result.code}`;}
+        catch(error){if(generation===importGeneration){const failure=safeFailure('inspection',error);el('firebase-inspect-result').textContent=`読取失敗・存在件数は未確認：${failure.stage} / ${failure.code}`;}}
+        finally{if(generation===importGeneration)inspectButton.disabled=false;}
+      };
+    }
     const view={
       clear(){ window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-editor').hidden=true;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';selectedCase=null; },
       state,
       control(value) {
-        sourceControl=value;pendingImport=null;importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
+        sourceControl=value;if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
         el('firebase-import').hidden=perCase?!(value?.mode==='firestore'&&value?.allowSourceIngest):value?.mode!=='migration';
         el('firebase-save').disabled=value?.mode!=='firestore';
       },
@@ -81,13 +91,13 @@ try {
       if(!selectedCase.sent){patch.status=el('firebase-state').value;patch.readiness=patch.status;}
       await session.save(el('firebase-case').value,patch);
     }catch(e){state(e.message);}finally{el('firebase-save').disabled=sourceControl?.mode!=='firestore';}};
-    el('firebase-import-file').onchange=()=>{pendingImport=null;importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';};
+    el('firebase-import-file').onchange=()=>{pendingImport=null;if(inspectButton)inspectButton.disabled=true;importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';};
     el('firebase-import-check').onclick=async()=>{const generation=++importGeneration;pendingImport=null;el('firebase-import-save').disabled=true;try{
       const file=el('firebase-import-file').files[0];if(!file||file.size>(perCase?1000000:500000)||(perCase?sourceControl?.mode!=='firestore':sourceControl?.mode!=='migration'))throw Error('移行モードとファイルを確認してください。');
       const result=perCase?await verifyIntake(JSON.parse(await file.text()),{space:config.testOnly?'synthetic':'real'}):await prepareImport(await file.text(),sourceControl.approvedSourceHash,window.OutboundModel.parse);
-      if(generation!==importGeneration)return;pendingImport=result;el('firebase-import-result').textContent=perCase?`照合済み：${result.entries.length}案件。原本のcommit・内容と確定記録を確認してください。`:`hash一致・8件・READY ${result.counts.readyCount}件・送信済み ${result.counts.sentCount}件。元ファイルは保持します。`;el('firebase-import-save').disabled=false;
+      if(generation!==importGeneration)return;pendingImport=result;if(inspectButton)inspectButton.disabled=false;el('firebase-import-result').textContent=perCase?`照合済み：${result.entries.length}案件。原本のcommit・内容と確定記録を確認してください。`:`hash一致・8件・READY ${result.counts.readyCount}件・送信済み ${result.counts.sentCount}件。元ファイルは保持します。`;el('firebase-import-save').disabled=false;
     }catch(e){if(generation===importGeneration)el('firebase-import-result').textContent=e.message;}};
-    el('firebase-import-save').onclick=async()=>{el('firebase-import-save').disabled=true;const prepared=pendingImport;pendingImport=null;try{if(!prepared)throw Error('再照合が必要です。');if(perCase){await store.ingest(prepared);const rows=await store.readback(prepared);el('firebase-import-result').textContent=`${rows.length}案件をサーバーから再取得し、原本と履歴を照合しました。`;}else{await store.importInitial(prepared);el('firebase-import-result').textContent='初回保存完了。正本切替はまだ行っていません。';}}catch{el('firebase-import-result').textContent=perCase?'取込み全体の成功は未確認です。部分保存の可能性があります。同じファイルの再実行は完了分を重複登録しません。原本とサーバー記録を照合してください。':'保存できません。権限・移行モード・hash・既存データを確認してください。上書き再試行はしません。';}};
+    el('firebase-import-save').onclick=async()=>{const generation=importGeneration;el('firebase-import-save').disabled=true;const prepared=pendingImport;pendingImport=null;try{if(!prepared)throw Error('再照合が必要です。');if(perCase){const result=await ingestAndVerify(store,prepared);if(generation!==importGeneration)return;if(!result.ok){el('firebase-import-result').textContent=`保存結果未確認：${result.stage} / ${result.code}。再保存せず、サーバー記録を読取りで確認してください。`;return;}const rows=result.rows;el('firebase-import-result').textContent=`${rows.length}案件をサーバーから再取得し、原本と履歴を照合しました。`;}else{await store.importInitial(prepared);el('firebase-import-result').textContent='初回保存完了。正本切替はまだ行っていません。';}}catch{el('firebase-import-result').textContent=perCase?'取込み全体の成功は未確認です。部分保存の可能性があります。同じファイルの再実行は完了分を重複登録しません。原本とサーバー記録を照合してください。':'保存できません。権限・移行モード・hash・既存データを確認してください。上書き再試行はしません。';}};
     // Do not let local files masquerade as synchronized Firestore records.
     el('outbound-file').disabled=true;
     }
