@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const ns='http://www.w3.org/2000/svg',colors={ready:'#5be3c2',preparing:'#efba69',sent:'#73a5fa'};
+  const ns='http://www.w3.org/2000/svg',colors={unknown:'#d4e5f6',ready:'#5be3c2',preparing:'#efba69',sent:'#73a5fa',candidate:'#efba69',hold:'#a8adb7',interested:'#56d5c3',declined:'#ee9090',contracted:'#c49cf0',paid:'#f6d677'};
   const instances=new Map();
   function svgNode(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;}
   function rings(){const g=window.RoyJapanGeometry.geometry;return(g.type==='MultiPolygon'?g.coordinates:[g.coordinates]).filter(p=>p[0].some(([x,y])=>x>=122&&x<=149&&y>=24&&y<=46));}
@@ -21,11 +21,11 @@
   function draw(instance,cases,onOpen,filter){
     instance.pinGroup.replaceChildren();instance.pins=[];
     const groups=new Map();
-    cases.forEach((c,i)=>{const loc=RoyGeography.locate(c);if(!loc||(filter!=='all'&&c.state!==filter))return;const k=loc.longitude+','+loc.latitude;if(!groups.has(k))groups.set(k,{loc,items:[]});groups.get(k).items.push({c,i});});
+    cases.forEach((c,i)=>{const loc=RoyGeography.locate(c);if(!loc||!OutboundModel.matches(c,filter))return;const k=loc.longitude+','+loc.latitude+','+loc.basis+','+loc.label;if(!groups.has(k))groups.set(k,{loc,items:[]});groups.get(k).items.push({c,i});});
     for(const {loc,items}of groups.values()){
-      const [x,y]=RoyGeography.project(loc.longitude,loc.latitude),mixed=new Set(items.map(({c})=>c.state)).size>1,color=mixed?'#d4e5f6':colors[items[0].c.state];
+      const [x,y]=RoyGeography.project(loc.longitude,loc.latitude),mixed=new Set(items.map(({c})=>c.salesStage||c.state)).size>1,color=mixed?'#d4e5f6':colors[items[0].c.salesStage||items[0].c.state];
       const g=svgNode('g',{class:'pin',tabindex:0,role:'button','aria-label':`${loc.label} ${items.length}件 ${loc.basis}`});
-      const title=svgNode('title');title.textContent=loc.label+' · '+items.map(({c})=>c.businessName).join(' / ')+' · '+loc.basis;
+      const title=svgNode('title');title.textContent=loc.label+' · '+items.map(({c})=>`${c.businessName}（${c.salesLabel||c.state}）`).join(' / ')+' · '+loc.basis;
       g.append(title,svgNode('rect',{x:x-18,y:y-22,width:Math.max(86,loc.label.length*12+48),height:44,fill:'transparent',class:'pin-hit'}),svgNode('circle',{cx:x,cy:y,r:17,fill:color,class:'halo'}),svgNode('circle',{cx:x,cy:y,r:6,fill:color,class:'pin-center'}));
       const label=svgNode('text',{x:x+12,y:y-10});label.textContent=loc.label+(items.length>1?` (${items.length})`:'');g.append(label);
       const open=()=>onOpen(items.map(({i})=>i));g.addEventListener('click',open);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});

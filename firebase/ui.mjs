@@ -57,7 +57,7 @@ try {
       };
     }
     const view={
-      clear(){ window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-editor').hidden=true;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';selectedCase=null; },
+      clear(){ window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-test-summary').textContent='';el('firebase-editor').hidden=true;el('firebase-case').onchange=null;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';el('firebase-state').value='NOT_READY';selectedCase=null; },
       state,
       control(value) {
         sourceControl=value;if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
@@ -65,15 +65,15 @@ try {
         el('firebase-save').disabled=value?.mode!=='firestore';
       },
       show(payload){
-        window.RoyOutboundView.show(payload,config.testOnly?'架空データ試験（実績ではありません）':'Firestore参照（正本切替は別途確認）');
+        window.RoyOutboundView.show(payload,config.testOnly?'架空データ試験（実績ではありません）':'Firestore参照（正本切替は別途確認）',config.testOnly?'synthetic':'private');
         el('firebase-test-summary').hidden=!(config.testOnly||perCase);
         if(perCase){const sent=payload.cases.filter(c=>c.sent).length,ready=payload.cases.filter(c=>!c.sent&&c.status==='READY_FOR_HUMAN_GO').length;el('firebase-test-summary').textContent=`管理者内の集計：${payload.cases.length}件・送信済み${sent}・READY ${ready}・準備中${payload.cases.length-sent-ready}`;}
-        el('firebase-editor').hidden=false;
+        el('firebase-editor').hidden=payload.cases.length===0;
         el('firebase-case').replaceChildren(...payload.cases.map(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.business_name;return o;}));
         const fill=()=>{ const c=payload.cases.find(c=>c.id===el('firebase-case').value);el('firebase-next').value=c?.next_action||'';el('firebase-note').value=c?.internal_note||'';selectedCase=c;
           el('firebase-state').disabled=!!c?.sent;el('firebase-state').value=c?.sent?'NOT_READY':c?.status;el('firebase-checked').value=c?.last_checked_at||'';
           el('firebase-gates').replaceChildren();
-          for(const gate of [...(c.confirmed_gates||[]),...(c.missing_gates||[])]){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.dataset.code=gate.code;input.checked=c.confirmed_gates.some(g=>g.code===gate.code)||c.gate_checks?.[gate.code]===true;input.disabled=gate.code==='initial_send_go'||c.confirmed_gates.some(g=>g.code===gate.code);label.append(input,document.createTextNode(gate.label));el('firebase-gates').append(label);}
+          for(const gate of [...(c?.confirmed_gates||[]),...(c?.missing_gates||[])]){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.dataset.code=gate.code;input.checked=c.confirmed_gates.some(g=>g.code===gate.code)||c.gate_checks?.[gate.code]===true;input.disabled=gate.code==='initial_send_go'||c.confirmed_gates.some(g=>g.code===gate.code);label.append(input,document.createTextNode(gate.label));el('firebase-gates').append(label);}
          };
         el('firebase-case').onchange=fill;fill();
       }
