@@ -2,18 +2,18 @@ rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
   function admin() {
-   return request.auth != null && request.auth.uid == 'atmDvobZO2U0T5VKrsAe69tEkdt1'
-    && request.auth.token.email == 'roy.lab.20261001@gmail.com'
-    && request.auth.token.firebase.sign_in_provider == 'google.com'
-    && request.auth.token.email_verified == true
-    && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.enabled == true;
+   let a=request.auth; let t=a == null ? {} : a.token;
+   return a != null && a.uid == 'atmDvobZO2U0T5VKrsAe69tEkdt1'
+    && t.email == 'roy.lab.20261001@gmail.com'
+    && t.firebase.sign_in_provider == 'google.com'
+    && t.email_verified == true
+    && get(/databases/$(database)/documents/admins/$(a.uid)).data.enabled == true;
   }
   function spaceOK(space) { return space in ['real','synthetic']; }
   function active(space) { return get(/databases/$(database)/documents/privateRoy/$(space)/control/state).data.mode == 'active'; }
-  function sourceAllowed(space) { return active(space) && get(/databases/$(database)/documents/privateRoy/$(space)/control/state).data.allowSourceIngest == true; }
+  function sourceAllowed(space) { let c=get(/databases/$(database)/documents/privateRoy/$(space)/control/state).data; return c.mode == 'active' && c.allowSourceIngest == true; }
   function hash(v) { return v is string && v.matches('^[0-9a-f]{64}$'); }
   function id(v) { return v is string && v.matches('^roy-web-[0-9]{4}$'); }
-  function gate(p,n) { return n >= p.missing_gates.size() || p.missing_gates[n].code == 'initial_send_go' || p.gate_checks.get(p.missing_gates[n].code,false) == true; }
   function validCalendar(s) {
    let year=int(s[0:4]); let month=int(s[5:7]); let day=int(s[8:10]);
    let leap=year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
@@ -27,17 +27,13 @@ service cloud.firestore {
   function validPreview(s) {
    return s is string && s.size() <= 2048 && s.matches('^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?[.])+[A-Za-z]{2,63}(:443)?([/?#]([A-Za-z0-9._~!$&()*+,;=:@/?#-]|%[0-9A-Fa-f]{2})*)?$');
   }
-  function ready(p) {
-   return validPreview(p.preview_url) && validCheckedAt(p.last_checked_at)
-    && gate(p,0) && gate(p,1) && gate(p,2) && gate(p,3) && gate(p,4) && gate(p,5) && gate(p,6) && gate(p,7)
-    && gate(p,8) && gate(p,9) && gate(p,10) && gate(p,11) && gate(p,12) && gate(p,13) && gate(p,14) && gate(p,15);
-  }
+  function ready(p) { return validPreview(p.preview_url) && validCheckedAt(p.last_checked_at); }
   function checks(m) {
-   return m is map && m.keys().hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review'])
+   return m is map && (m.size() == 0 || ( m.keys().hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review'])
     && m.get('anonymous_reload',false) is bool && m.get('gmail_current_history',false) is bool
     && m.get('send_reconciliation',false) is bool && m.get('public_preview',false) is bool
     && m.get('visual_qa',false) is bool && m.get('sales_screenshot',false) is bool
-    && m.get('current_source_contact',false) is bool && m.get('bounded_contact_policy_review',false) is bool;
+    && m.get('current_source_contact',false) is bool && m.get('bounded_contact_policy_review',false) is bool));
   }
   function gateShape(g) {
    return g is map && g.keys().hasOnly(['code','label','evidence'])
@@ -45,76 +41,56 @@ service cloud.firestore {
     && g.label is string && g.label.size() > 0 && g.label.size() <= 500
     && g.get('evidence','') is string && g.get('evidence','').size() <= 4000;
   }
-  function gateAt(items,n) { return n >= items.size() || gateShape(items[n]); }
-  function codeAt(items,n) { return n < items.size() ? items[n].code : ''; }
-  function gateCodes(items) {
-   return [
-    codeAt(items,0),codeAt(items,1),codeAt(items,2),codeAt(items,3),codeAt(items,4),codeAt(items,5),codeAt(items,6),codeAt(items,7),
-    codeAt(items,8),codeAt(items,9),codeAt(items,10),codeAt(items,11),codeAt(items,12),codeAt(items,13),codeAt(items,14),codeAt(items,15),
-    codeAt(items,16),codeAt(items,17),codeAt(items,18),codeAt(items,19),codeAt(items,20),codeAt(items,21),codeAt(items,22),codeAt(items,23),
-    codeAt(items,24),codeAt(items,25),codeAt(items,26),codeAt(items,27),codeAt(items,28),codeAt(items,29),codeAt(items,30),codeAt(items,31)
-   ].removeAll(['']);
-  }
-  function gateList(items) {
-   return gateAt(items,0) && gateAt(items,1) && gateAt(items,2) && gateAt(items,3) && gateAt(items,4) && gateAt(items,5) && gateAt(items,6) && gateAt(items,7)
-    && gateAt(items,8) && gateAt(items,9) && gateAt(items,10) && gateAt(items,11) && gateAt(items,12) && gateAt(items,13) && gateAt(items,14) && gateAt(items,15)
-    && gateAt(items,16) && gateAt(items,17) && gateAt(items,18) && gateAt(items,19) && gateAt(items,20) && gateAt(items,21) && gateAt(items,22) && gateAt(items,23)
-    && gateAt(items,24) && gateAt(items,25) && gateAt(items,26) && gateAt(items,27) && gateAt(items,28) && gateAt(items,29) && gateAt(items,30) && gateAt(items,31);
-  }
-  function restrictionAt(items,n) { return n >= items.size() || (items[n] is string && items[n].size() > 0 && items[n].size() <= 2000); }
-  function restrictions(items) {
-   return restrictionAt(items,0) && restrictionAt(items,1) && restrictionAt(items,2) && restrictionAt(items,3) && restrictionAt(items,4) && restrictionAt(items,5) && restrictionAt(items,6) && restrictionAt(items,7)
-    && restrictionAt(items,8) && restrictionAt(items,9) && restrictionAt(items,10) && restrictionAt(items,11) && restrictionAt(items,12) && restrictionAt(items,13) && restrictionAt(items,14) && restrictionAt(items,15)
-    && restrictionAt(items,16) && restrictionAt(items,17) && restrictionAt(items,18) && restrictionAt(items,19) && restrictionAt(items,20) && restrictionAt(items,21) && restrictionAt(items,22) && restrictionAt(items,23)
-    && restrictionAt(items,24) && restrictionAt(items,25) && restrictionAt(items,26) && restrictionAt(items,27) && restrictionAt(items,28) && restrictionAt(items,29) && restrictionAt(items,30) && restrictionAt(items,31);
-  }
-  function gateSets(confirmed,missing) {
-   let c=gateCodes(confirmed); let m=gateCodes(missing);
-   return c.toSet().size() == confirmed.size() && m.toSet().size() == missing.size() && !c.hasAny(m)
-    && m.hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review','initial_send_go']);
-  }
+
+
+
+
   function payload(p,caseId) {
+   let name=p.business_name; let revenue=p.confirmed_revenue_usd; let next=p.next_action; let note=p.internal_note; let url=p.preview_url; let status=p.status; let sent=p.sent;
+   let c=p.confirmed_gates; let m=p.missing_gates; let r=p.restrictions;
    return p is map && p.keys().size() <= 32 && p.id == caseId && id(caseId)
-    && p.business_name is string && p.business_name.size() > 0 && p.business_name.size() <= 200
-    && p.confirmed_revenue_usd is number && p.confirmed_revenue_usd >= 0 && p.confirmed_revenue_usd <= 1000000000
-    && p.sent is bool && p.status in ['NOT_READY','READY_FOR_HUMAN_GO','SENT_WAITING'] && p.readiness == p.status
-    && p.sent == (p.status == 'SENT_WAITING')
-    && (p.sent ? (p.sent_evidence is map && p.email.sent_at is string) : p.sent_evidence == null)
-    && p.confirmed_gates is list && p.confirmed_gates.size() <= 32
-    && p.missing_gates is list && p.missing_gates.size() <= 16
-    && gateList(p.confirmed_gates) && gateList(p.missing_gates) && gateSets(p.confirmed_gates,p.missing_gates)
-    && p.restrictions is list && p.restrictions.size() <= 32 && restrictions(p.restrictions)
-    && p.next_action is string && p.next_action.size() <= 4000 && p.internal_note is string && p.internal_note.size() <= 4000
-    && (p.preview_url == null || validPreview(p.preview_url))
-    && checks(p.gate_checks) && (p.status != 'READY_FOR_HUMAN_GO' || ready(p));
+    && name is string && name.size() > 0 && name.size() <= 200
+    && revenue is number && revenue >= 0 && revenue <= 1000000000
+    && sent is bool && status in ['NOT_READY','READY_FOR_HUMAN_GO','SENT_WAITING'] && p.readiness == status
+    && sent == (status == 'SENT_WAITING')
+    && (sent ? (p.sent_evidence is map && p.email.sent_at is string) : p.sent_evidence == null)
+    && c is list && c.size() <= 32
+    && m is list && m.size() <= 16
+    && r is list && r.size() <= 32
+    && next is string && next.size() <= 4000 && note is string && note.size() <= 4000
+    && (url == null || validPreview(url))
+    && checks(p.gate_checks) && (status != 'READY_FOR_HUMAN_GO' || ready(p));
   }
   function record(d,caseId) {
+   let s=d.source;
    return d.keys().hasOnly(['schemaVersion','revision','source','sourceData','payload','changeKind','operationId','updatedBy','updatedAt'])
     && d.schemaVersion == 2 && d.revision is int && d.revision > 0 && d.revision <= 1000000
-    && d.source.keys().hasOnly(['repo','commit','path','key','version','hash','intakeId'])
-    && d.source.repo == 'roy-baty-ai/roy-lab' && d.source.commit.matches('^[0-9a-f]{40}$')
-    && d.source.path in ['business/outbound.json','knowledge/ROY_CURRENT_STATE.md']
-    && d.source.key is string && d.source.key.size() > 0 && d.source.key.size() <= 300
-    && d.source.version is int && d.source.version > 0 && hash(d.source.hash) && hash(d.source.intakeId)
+    && s.keys().hasOnly(['repo','commit','path','key','version','hash','intakeId'])
+    && s.repo == 'roy-baty-ai/roy-lab' && s.commit.matches('^[0-9a-f]{40}$')
+    && s.path in ['business/outbound.json','knowledge/ROY_CURRENT_STATE.md']
+    && s.key is string && s.key.size() > 0 && s.key.size() <= 300
+    && s.version is int && s.version > 0 && hash(s.hash) && hash(s.intakeId)
     && hash(d.operationId) && d.changeKind in ['source','manual']
     && payload(d.payload,caseId) && d.sourceData is map
     && d.updatedBy == request.auth.uid && d.updatedAt == request.time;
   }
   function receiptMatches(space,caseId,d) {
-   let m=getAfter(/databases/$(database)/documents/privateRoy/$(space)/intakes/$(d.source.intakeId)).data;
+   let s=d.source;
+   let m=getAfter(/databases/$(database)/documents/privateRoy/$(space)/intakes/$(s.intakeId)).data;
    let e=m.entries[caseId];
-   return m.sourceCommit == d.source.commit && e.sourceVersion == d.source.version && e.sourceHash == d.source.hash
-    && e.sourcePath == d.source.path && e.sourceKey == d.source.key && e.expectedRevision == d.revision - 1;
+   return m.sourceCommit == s.commit && e.sourceVersion == s.version && e.sourceHash == s.hash
+    && e.sourcePath == s.path && e.sourceKey == s.key && e.expectedRevision == d.revision - 1;
   }
   function historyMatches(space,caseId,d) {
    return getAfter(/databases/$(database)/documents/privateRoy/$(space)/cases/$(caseId)/history/$(string(d.revision))).data.record == d;
   }
   function sourceShape(space,caseId,d) {
-   return d.changeKind == 'source' && d.operationId == d.source.intakeId && sourceAllowed(space)
-    && d.payload.diff(d.sourceData).affectedKeys().hasOnly(['internal_note'])
-    && d.sourceData.internal_note is string && d.sourceData.internal_note.size() <= 4000
-    && d.payload.status != 'READY_FOR_HUMAN_GO' && d.payload.gate_checks.size() == 0
-    && d.sourceData.status != 'READY_FOR_HUMAN_GO' && d.sourceData.gate_checks.size() == 0
+   let s=d.source; let p=d.payload; let o=d.sourceData;
+   return d.changeKind == 'source' && d.operationId == s.intakeId && sourceAllowed(space)
+    && p.diff(o).affectedKeys().hasOnly(['internal_note'])
+    && o.internal_note is string && o.internal_note.size() <= 4000
+    && p.status != 'READY_FOR_HUMAN_GO' && p.gate_checks.size() == 0
+    && o.status != 'READY_FOR_HUMAN_GO' && o.gate_checks.size() == 0
     && receiptMatches(space,caseId,d)
     && caseId in getAfter(/databases/$(database)/documents/privateRoy/$(space)/registry/current).data.caseIds;
   }
@@ -130,6 +106,44 @@ service cloud.firestore {
     && b.payload.restrictions.hasAll(a.payload.restrictions)
     && b.payload.confirmed_gates.hasAll(a.payload.confirmed_gates);
   }
+
+  // Parts and certificates are immutable. A case can only use fully validated evidence.
+  function partCodes(g) {
+   return g.size() == 0 ? [] : g.size() == 1 ? [g[0].code] : g.size() == 2 ? [g[0].code,g[1].code] : g.size() == 3 ? [g[0].code,g[1].code,g[2].code] : [g[0].code,g[1].code,g[2].code,g[3].code];
+  }
+  function smallGates(g) {
+   return (g.size() < 1 || gateShape(g[0])) && (g.size() < 2 || gateShape(g[1]))
+    && (g.size() < 3 || gateShape(g[2])) && (g.size() < 4 || gateShape(g[3]));
+  }
+  function restriction(v) { return v is string && v.size() > 0 && v.size() <= 2000; }
+  function part(d) {
+   let c=d.confirmed; let m=d.missing; let r=d.restrictions;
+   return d.keys().hasOnly(['confirmed','missing','restrictions','confirmedCodes','missingCodes'])
+    && c is list && c.size() <= 4 && m is list && m.size() <= 2 && r is list && r.size() <= 4
+    && smallGates(c) && smallGates(m)
+    && (r.size() < 1 || restriction(r[0])) && (r.size() < 2 || restriction(r[1]))
+    && (r.size() < 3 || restriction(r[2])) && (r.size() < 4 || restriction(r[3]))
+    && d.confirmedCodes == partCodes(c) && d.missingCodes == partCodes(m);
+  }
+  function checkedCodes(m) {
+   return [
+    m.get('anonymous_reload',false) ? 'anonymous_reload' : '',
+    m.get('gmail_current_history',false) ? 'gmail_current_history' : '',
+    m.get('send_reconciliation',false) ? 'send_reconciliation' : '',
+    m.get('public_preview',false) ? 'public_preview' : '',
+    m.get('visual_qa',false) ? 'visual_qa' : '',
+    m.get('sales_screenshot',false) ? 'sales_screenshot' : '',
+    m.get('current_source_contact',false) ? 'current_source_contact' : '',
+    m.get('bounded_contact_policy_review',false) ? 'bounded_contact_policy_review' : ''
+   ].removeAll(['']);
+  }
+  function evidence(space,caseId,d) {
+   let e=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(d.source.intakeId)/cases/$(caseId)).data;
+   let p=d.payload;
+   return p.confirmed_gates == e.confirmed && p.missing_gates == e.missing && p.restrictions == e.restrictions
+    && (p.status != 'READY_FOR_HUMAN_GO' || e.missingCodes.removeAll(['initial_send_go']).hasOnly(checkedCodes(p.gate_checks)));
+  }
+
   function numericPublic(d) {
    return d.keys().hasOnly(['caseCount','readyCount','preparingCount','sentCount','previewCount','confirmedRevenueUsd','targetCount','revision','updatedAt'])
     && d.caseCount is int && d.caseCount >= 0 && d.caseCount <= 50
@@ -172,13 +186,18 @@ service cloud.firestore {
   }
   match /privateRoy/{space}/cases/{caseId} {
    allow get: if spaceOK(space) && admin();
-   allow create: if spaceOK(space) && admin() && record(request.resource.data,caseId)
-    && request.resource.data.revision == 1 && request.resource.data.source.version == 1
-    && sourceShape(space,caseId,request.resource.data) && historyMatches(space,caseId,request.resource.data);
-   allow update: if spaceOK(space) && admin() && active(space) && record(request.resource.data,caseId)
-    && request.resource.data.revision == resource.data.revision+1
-    && (manual(resource.data,request.resource.data) || sourceUpdate(space,caseId,resource.data,request.resource.data))
-    && historyMatches(space,caseId,request.resource.data);
+   function createCase(d) {
+    return d.revision == 1 && d.source.version == 1 && sourceShape(space,caseId,d)
+     && record(d,caseId) && evidence(space,caseId,d) && historyMatches(space,caseId,d);
+   }
+   function updateCase(a,b) {
+    return b.revision == a.revision+1
+     && (b.changeKind == 'manual' ? manual(a,b) : sourceUpdate(space,caseId,a,b))
+     && record(b,caseId) && evidence(space,caseId,b) && historyMatches(space,caseId,b);
+   }
+   allow create: if spaceOK(space) && admin() && createCase(request.resource.data);
+   allow update: if spaceOK(space) && admin() && active(space)
+    && (resource != null ? updateCase(resource.data,request.resource.data) : false);
    allow list, delete: if false;
    match /history/{revision} {
     allow get: if spaceOK(space) && admin();
@@ -189,6 +208,39 @@ service cloud.firestore {
     allow list, update, delete: if false;
    }
   }
+
+  match /privateRoy/{space}/validation/{intakeId}/cases/{caseId} {
+   allow get: if spaceOK(space) && admin();
+   function assembled(d) {
+    let v0=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/0).data;
+    let v1=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/1).data;
+    let v2=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/2).data;
+    let v3=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/3).data;
+    let v4=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/4).data;
+    let v5=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/5).data;
+    let v6=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/6).data;
+    let v7=get(/databases/$(database)/documents/privateRoy/$(space)/validation/$(intakeId)/cases/$(caseId)/parts/7).data;
+    return d.keys().hasOnly(['confirmed','missing','restrictions','confirmedCodes','missingCodes'])
+     && d.confirmed == v0.confirmed.concat(v1.confirmed).concat(v2.confirmed).concat(v3.confirmed).concat(v4.confirmed).concat(v5.confirmed).concat(v6.confirmed).concat(v7.confirmed)
+     && d.missing == v0.missing.concat(v1.missing).concat(v2.missing).concat(v3.missing).concat(v4.missing).concat(v5.missing).concat(v6.missing).concat(v7.missing)
+     && d.restrictions == v0.restrictions.concat(v1.restrictions).concat(v2.restrictions).concat(v3.restrictions).concat(v4.restrictions).concat(v5.restrictions).concat(v6.restrictions).concat(v7.restrictions)
+     && d.confirmedCodes == v0.confirmedCodes.concat(v1.confirmedCodes).concat(v2.confirmedCodes).concat(v3.confirmedCodes).concat(v4.confirmedCodes).concat(v5.confirmedCodes).concat(v6.confirmedCodes).concat(v7.confirmedCodes)
+     && d.missingCodes == v0.missingCodes.concat(v1.missingCodes).concat(v2.missingCodes).concat(v3.missingCodes).concat(v4.missingCodes).concat(v5.missingCodes).concat(v6.missingCodes).concat(v7.missingCodes)
+     && d.confirmedCodes.toSet().size() == d.confirmedCodes.size()
+     && d.missingCodes.toSet().size() == d.missingCodes.size()
+     && !d.confirmedCodes.hasAny(d.missingCodes)
+     && d.missingCodes.hasOnly(['anonymous_reload','gmail_current_history','send_reconciliation','public_preview','visual_qa','sales_screenshot','current_source_contact','bounded_contact_policy_review','initial_send_go']);
+   }
+   allow create: if spaceOK(space) && admin() && sourceAllowed(space) && hash(intakeId) && id(caseId) && assembled(request.resource.data);
+   allow list, update, delete: if false;
+   match /parts/{partId} {
+    allow get: if spaceOK(space) && admin();
+    allow create: if spaceOK(space) && admin() && sourceAllowed(space) && hash(intakeId) && id(caseId)
+     && partId in ['0','1','2','3','4','5','6','7'] && part(request.resource.data);
+    allow list, update, delete: if false;
+   }
+  }
+
   match /{document=**} { allow read, write: if false; }
  }
 }
