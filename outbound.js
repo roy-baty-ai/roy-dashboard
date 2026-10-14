@@ -21,8 +21,8 @@
     }
     const data=publicSummary;
     if(!data){el('sales-metrics').replaceChildren(node('p','公開概要は未取得です。件数・売上は不明です。'));el('sales-source').textContent='公開概要を取得できるまで件数・売上は未確認です。';return;}
-    el('sales-metrics').replaceChildren(metric('営業案件', `${data.candidateCount}件`, `目標：見本付きの強い${data.targetCount}件`), metric('人の判断待ち', `${data.readyCount}件`, 'READY_FOR_HUMAN_GO'), metric('送信済み', `${data.sentCount}件`, `準備中 ${data.preparingCount}件・受注とは別`), metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '収益目標は本業の状況を参照'));
-    el('sales-source').textContent = `${embedded?'同梱資料の概要':'公開概要'}：${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
+    el('sales-metrics').replaceChildren(metric('営業案件', `${data.candidateCount}件`, `固定公開概要・自動更新なし`), metric('人の判断待ち', `${data.readyCount}件`, 'READY_FOR_HUMAN_GO'), metric('送信済み', `${data.sentCount}件`, `準備中 ${data.preparingCount}件・受注とは別`), metric('確認済み売上', `$${data.confirmedRevenueUsd}`, '収益目標は本業の状況を参照'));
+    el('sales-source').textContent = `${embedded?'同梱資料の概要':`公開概要（固定記録・自動更新なし／${OutboundModel.validDate(data.verifiedAt)?'現在時点の再確認ではありません':'対象時点未記録のため未更新の可能性あり'}）`}：${data.note} 最終確認：${date(OutboundModel.validDate(data.verifiedAt) ? data.verifiedAt : null)}。`;
   }
 
   function field(dl, label, content) { dl.append(node('dt', label), node('dd', content || '未記録・要確認')); }

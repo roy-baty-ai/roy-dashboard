@@ -65,3 +65,21 @@ test('Rules predicates share client patterns and calendar checks (static only)',
  for(const pattern of [globalThis.OutboundModel.CHECKED_AT_PATTERN,globalThis.OutboundModel.PREVIEW_URL_PATTERN])assert.ok(rules.includes(pattern));
  assert.match(rules,/year % 400/);assert.match(rules,/validCalendar\(s\)/);assert.match(rules,/validCheckedAt\(p.last_checked_at\)/);assert.match(rules,/validPreview\(p.preview_url\)/);
 });
+
+
+test('freshness separates business checks from database write times and unknown from empty',async()=>{
+ const {recordFreshness,freshnessText}=await import('../firebase/freshness.mjs');
+ const info=recordFreshness([{payload:{last_checked_at:'2026-10-12T10:00:00Z'},updatedAt:{toDate:()=>new Date('2026-10-13T19:00:00Z')}},{payload:{last_checked_at:null},updatedAt:null}]);
+ assert.equal(info.caseCount,2);assert.equal(info.checkedCount,1);assert.equal(info.writtenCount,1);
+ assert.equal(info.checked.latest,'2026-10-12T10:00:00Z');assert.equal(info.written.latest,'2026-10-13T19:00:00.000Z');
+ assert.match(freshnessText(info,{mode:'paused'}),/書込停止/);assert.match(freshnessText(info,{mode:'paused'}),/記録あり 1\/2件/);
+ assert.match(freshnessText(recordFreshness([]),null),/対象：0案件/);assert.match(freshnessText(null,null),/対象：未取得。業務確認日時：未取得/);
+ assert.equal(recordFreshness([{payload:{last_checked_at:'2026-02-30T00:00:00Z'},updatedAt:{toDate:()=>new Date(NaN)}}]).checkedCount,0);
+});
+test('intake progress cannot report verified before successful server readback',async()=>{
+ const {ingestAndVerify}=await import('../firebase/intake-diagnostics.mjs');const events=[],m={entries:[{},{}]};
+ const api={async ingest(_,options){options.onStage('case-committed');options.onStage('case-committed');},async readback(){assert.ok(!events.some(x=>x.state==='verified'));return [{},{}];}};
+ assert.equal((await ingestAndVerify(api,m,{onProgress:p=>events.push(p)})).ok,true);
+ assert.equal(events[0].state,'importing');assert.ok(events.some(x=>x.state==='partial'&&x.completed===1));assert.equal(events.at(-1).state,'verified');
+ const failed=[];api.readback=async()=>{throw Error('private failure body');};assert.equal((await ingestAndVerify(api,m,{onProgress:p=>failed.push(p)})).ok,false);assert.ok(!failed.some(x=>x.state==='verified'));assert.equal(failed.at(-1).state,'partial');assert.ok(!JSON.stringify(failed).includes('private failure body'));
+});
