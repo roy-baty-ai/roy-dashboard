@@ -15,7 +15,7 @@ export function createSession(api, view) {
       stopData = api.watchPrivate(value => {
         if (token !== epoch || generation !== stream) return;
         if (!value) { wipe('未移行またはオフライン：現在の内部案件を確認できません。'); return; }
-        try { view.show(value.payload); record = value; view.state(`認証済み・Firestore revision ${value.revision}（正本切替前は読取専用）`); } catch { wipe('内部データの形式を確認できません。表示を消去しました。'); }
+        try { view.show(value.payload,value.freshness); record = value; view.state(`認証済み・Firestore revision ${value.revision}（サーバー記録の受信。業務情報の最新確認ではありません）`); } catch { wipe('内部データの形式を確認できません。表示を消去しました。'); }
       }, () => { if (token === epoch && generation === stream) { stream++; wipe('権限または接続を確認できません。内部表示を消去しました。'); } });
     }, () => { if (token === epoch) { stream++; stopData(); stopControl(); view.control?.(null); wipe('管理者権限を確認できません。内部表示を消去しました。'); } });
   });

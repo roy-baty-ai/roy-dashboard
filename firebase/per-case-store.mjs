@@ -1,3 +1,4 @@
+import {recordFreshness} from './freshness.mjs';
 import {aggregate,canonicalJSON} from './store.mjs';
 import {verifyIntake,intakeReceipt,sourceRecord,manualRecord,digest,ROY_UID,stableId,validatePayload} from './intake.mjs';
 import {stageEvidence} from './evidence-validation.mjs';
@@ -20,7 +21,7 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
     if(stopped)return;clear();if(!index)return;
     if(!Array.isArray(index.caseIds)||index.caseIds.length>50||index.caseIds.some(id=>!stableId(id))||new Set(index.caseIds).size!==index.caseIds.length){error(Error('Invalid case registry'));return;}
     const token=generation,records=new Map();
-    const publish=()=>{if(records.size!==index.caseIds.length)return;viewRecords=new Map(records);const cases=index.caseIds.map(id=>records.get(id).payload);const payload={schema_version:1,cases,summary:{operating_revenue_usd_last_recorded:cases.reduce((sum,c)=>sum+c.confirmed_revenue_usd,0)}};const counts=aggregate(payload,parse);Object.assign(payload.summary,{case_count:cases.length,ready_for_human_go:counts.readyCount,not_ready_unsent_count:counts.preparingCount,sent_cases_in_this_view:counts.sentCount});next({payload,revision:index.caseIds.map(id=>`${id}:${records.get(id).revision}`).join(',')||'empty'});};
+    const publish=()=>{if(records.size!==index.caseIds.length)return;viewRecords=new Map(records);const cases=index.caseIds.map(id=>records.get(id).payload);const payload={schema_version:1,cases,summary:{operating_revenue_usd_last_recorded:cases.reduce((sum,c)=>sum+c.confirmed_revenue_usd,0)}};const counts=aggregate(payload,parse);Object.assign(payload.summary,{case_count:cases.length,ready_for_human_go:counts.readyCount,not_ready_unsent_count:counts.preparingCount,sent_cases_in_this_view:counts.sentCount});next({payload,freshness:recordFreshness(index.caseIds.map(id=>records.get(id))),revision:index.caseIds.map(id=>`${id}:${records.get(id).revision}`).join(',')||'empty'});};
     if(!index.caseIds.length)publish();
     for(const id of index.caseIds)stops.push(watch(`${base}/cases/${id}`,record=>{if(stopped||token!==generation)return;if(!record){records.delete(id);viewRecords.clear();next(null);return;}records.set(id,record);publish();},e=>{if(stopped||token!==generation)return;clear();error(e);}));
    },e=>{if(!stopped){clear();error(e);}});
@@ -57,7 +58,7 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
     const record={...result.record,updatedBy:user,updatedAt:sdk.serverTimestamp()};
     tx.set(ref(`${base}/cases/${e.caseId}`),record);tx.set(ref(`${base}/cases/${e.caseId}/history/${record.revision}`),{record});
     onStage('transaction-commit');return {caseId:e.caseId,status:'written',revision:record.revision};
-   }));}
+   }));onStage('case-committed');}
    return {manifestHash:m.manifestHash,outcomes,readbackRequired:true};
   },
   async inspectSynthetic(input){
