@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "build:firebase": "esbuild firebase/sdk-entry.js --bundle --format=esm --outfile=vendor/firebase-sdk.js --minify",
-    "test": "node --test tests/outbound.test.cjs tests/firebase.test.mjs tests/geography.test.cjs tests/intake.test.mjs tests/per-case-store.test.mjs",
+    "test": "node --test tests/outbound.test.cjs tests/firebase.test.mjs tests/geography.test.cjs tests/intake.test.mjs tests/per-case-store.test.mjs tests/work-results.test.mjs tests/result-feed.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project demo-roy-local --config firebase/emulator.json 'node --test tests/firestore-rules.test.mjs'",
     "test:rules:finalized": "firebase emulators:exec --only firestore --project demo-roy-local --config firebase/emulator-finalized.json 'node --test tests/finalized-rules.test.mjs'"
   },

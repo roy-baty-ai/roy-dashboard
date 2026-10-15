@@ -64,6 +64,14 @@
       return { ...sales(row,sent), businessName: row.businessName, region: str(row.region), location: location(row), nextAction: str(row.nextAction), category: str(row.category), value: str(row.proposalValue), preparation: str(row.preparation), sourceStatus: str(row.status), state, previewUrl, imageUrl: safeUrl(row.salesImageUrl), body: str(row.salesBody), recipient: str(row.recipient), remaining, verifiedAt };
     });
   }
+  function workProgress(note){
+    if(typeof note!=='string')return null;
+    for(const line of note.split('\n').reverse()){
+      if(!line.startsWith('ROY_WORK_RESULT '))continue;
+      try{const v=JSON.parse(line.slice(16));if(typeof v.progress==='string'&&v.progress.length<=500&&Array.isArray(v.evidence)&&v.evidence.every(e=>typeof e==='string'&&e.length<=500))return {progress:v.progress,evidence:v.evidence,completedAt:validDate(v.completedAt)?v.completedAt:null,receivedAt:validDate(v.receivedAt)?v.receivedAt:null};}catch{}
+    }
+    return null;
+  }
   function parseSnapshot(data) {
     if (data.cases.length > 500) throw new Error('案件数が上限を超えています。');
     const gateText = gate => typeof gate?.label === 'string' ? gate.label + (str(gate.evidence) ? `（${gate.evidence}）` : '') : '確認項目の形式が不明';
@@ -84,7 +92,7 @@
       const roleLabels = { sent: '送信済み', priority: '準備優先', reserve: '適格予備', additional_prepared: '追加準備' };
       const role = str(row.queue?.role);
       return {
-        ...sales(row,sent), businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), location: location(row), value: str(row.value_hypothesis),
+        ...sales(row,sent), workProgress:workProgress(row.internal_note), businessName: row.business_name, category: str(row.classification), categoryCode: str(row.classification_code), region: str(row.region), location: location(row), value: str(row.value_hypothesis),
         preparation: confirmed.join('\n') || '確認済みの準備記録なし', sourceStatus: str(row.status), state: sent ? 'sent' : ready ? 'ready' : 'preparing', previewUrl,
         previewNote: row.preview_status === 'MISSING' ? '未設定・未公開' : '既存URL。今回の集約での再確認なし', imageUrl: null,
         imageRef: str(row.sales_image?.library_file_id), imageName: str(row.sales_image?.filename), imageApproval: str(row.sales_image?.approval),

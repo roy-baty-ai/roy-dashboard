@@ -1,3 +1,4 @@
+import {attachResultFeed} from './result-feed.mjs';
 import {freshnessText} from './freshness.mjs';
 import {ingestAndVerify,inspectAndVerify,safeFailure} from './intake-diagnostics.mjs';
 import { validateConfig, createStore, prepareImport } from './store.mjs';
@@ -8,7 +9,7 @@ import { verifyIntake,ROY_UID } from './intake.mjs';
 import { probeSyntheticDenials } from './live-verification.mjs';
 const el=id=>document.getElementById(id), config=window.RoyFirebaseConfig;
 const perCase=config?.storageVersion===2;
-let inspectButton, inspectFile, session, stopPublic=()=>{}, stopProbeAuth=()=>{}, probeGeneration=0, sourceControl=null, pendingImport=null, freshness=null, selectedCase=null, importGeneration=0;
+let resultFeed, freshnessTimer, inspectButton, inspectFile, session, stopPublic=()=>{}, stopProbeAuth=()=>{}, probeGeneration=0, sourceControl=null, pendingImport=null, freshness=null, selectedCase=null, importGeneration=0;
 const state=message=>{ el('firebase-status').textContent=(config?.testOnly?'架空データ試験：':'')+message; };
 try {
   if (!validateConfig(config) || window.RoyPrivateSnapshot) state('Firebase未接続：正本は従来のJSONです。接続先と権限の承認後に有効化します。');
@@ -57,11 +58,13 @@ try {
         finally{if(generation===importGeneration)inspectButton.disabled=false;}
       };
     }
+    if(perCase)resultFeed=attachResultFeed({store,space:config.testOnly?'synthetic':'real',canWrite:()=>auth.currentUser?.uid===ROY_UID&&sourceControl?.mode==='firestore'&&freshness!==null});
+    freshnessTimer=setInterval(()=>{if(freshness)el('private-sync-state').textContent=freshnessText(freshness,sourceControl);},30000);
     const view={
       clear(){ freshness=null;el('private-sync-state').textContent='';el('private-sync-state').hidden=true;window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-test-summary').textContent='';el('firebase-editor').hidden=true;el('firebase-case').onchange=null;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';el('firebase-state').value='NOT_READY';selectedCase=null; },
       state,
       control(value) {
-        sourceControl=value;if(freshness)el('private-sync-state').textContent=freshnessText(freshness,value);if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
+        sourceControl=value;if(value?.mode!=='firestore')resultFeed?.stop();if(freshness)el('private-sync-state').textContent=freshnessText(freshness,value);if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
         el('firebase-import').hidden=perCase?!(value?.mode==='firestore'&&value?.allowSourceIngest):value?.mode!=='migration';
         el('firebase-save').disabled=value?.mode!=='firestore';
       },
@@ -105,4 +108,4 @@ try {
     }
   }
 } catch { window.RoyOutboundView.clear(); if(!perCase&&config?.enabled&&!config.authOnly&&!config.testOnly)window.RoyOutboundView.summary(null); state('Firebaseの接続設定または読込に失敗しました。内部データは表示しません。'); }
-window.addEventListener('pagehide',()=>{probeGeneration++;session?.dispose();stopPublic();stopProbeAuth();});
+window.addEventListener('pagehide',()=>{resultFeed?.stop();clearInterval(freshnessTimer);probeGeneration++;session?.dispose();stopPublic();stopProbeAuth();});

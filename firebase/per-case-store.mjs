@@ -1,3 +1,4 @@
+import {validateWorkResult,workResultPatch,containsWorkResult,findWorkReceipt} from './work-results.mjs';
 import {recordFreshness} from './freshness.mjs';
 import {aggregate,canonicalJSON} from './store.mjs';
 import {verifyIntake,intakeReceipt,sourceRecord,manualRecord,digest,ROY_UID,stableId,validatePayload} from './intake.mjs';
@@ -38,6 +39,36 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
     const record={...result.record,updatedBy:user,updatedAt:sdk.serverTimestamp()};
     tx.set(ref(`${base}/cases/${id}`),record);tx.set(ref(`${base}/cases/${id}/history/${record.revision}`),{record});
    });
+  },
+  async saveWorkResult(input){
+   const event=validateWorkResult(input);if(!auth.currentUser)throw Object.assign(Error('unauthenticated'),{code:'unauthenticated'});if(auth.currentUser.uid!==ROY_UID)throw Object.assign(Error('permission-denied'),{code:'permission-denied'});const user=uid();
+   const outcome=await sdk.runTransaction(db,async tx=>{
+    const [control,index,current]=await Promise.all([tx.get(ref(`${base}/control/state`)),tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/cases/${event.caseId}`))]);
+    if(control.data()?.mode!=='active')throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
+    if(!index.exists()||!Array.isArray(index.data().caseIds)||!index.data().caseIds.includes(event.caseId)||!current.exists())throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
+    const old=current.data(),prepared=await workResultPatch(old,event);
+    if(prepared.replayLookup){
+     // Older deliveries are checked against existing immutable history; they
+     // never overwrite a newer next action. No extra receipt collection.
+     for(let revision=old.revision-1;revision>=Math.max(1,old.revision-100);revision--){
+      const past=await tx.get(ref(`${base}/cases/${event.caseId}/history/${revision}`));
+      if(!past.exists())throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
+      const receipt=findWorkReceipt(past.data().record,event.eventId);
+      if(receipt){if(receipt.hash!==prepared.operationId)throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});return {revision,operationId:prepared.operationId,unchanged:true};}
+     }
+     throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
+    }
+    if(prepared.unchanged)return {revision:old.revision,operationId:prepared.operationId,unchanged:true};
+    const result=manualRecord(old,prepared.patch,old.revision,prepared.operationId);
+    const record={...result.record,updatedBy:user,updatedAt:sdk.serverTimestamp()};
+    tx.set(ref(`${base}/cases/${event.caseId}`),record);tx.set(ref(`${base}/cases/${event.caseId}/history/${record.revision}`),{record});
+    return {revision:record.revision,operationId:prepared.operationId,unchanged:false};
+   });
+   await sdk.runTransaction(db,async tx=>{
+    const [current,history]=await Promise.all([tx.get(ref(`${base}/cases/${event.caseId}`)),tx.get(ref(`${base}/cases/${event.caseId}/history/${outcome.revision}`))]);
+    if(!current.exists()||!history.exists()||!containsWorkResult(history.data().record,event.eventId,outcome.operationId)||current.data().revision<outcome.revision||history.data().record.revision!==outcome.revision||(current.data().revision===outcome.revision&&canonicalJSON(current.data())!==canonicalJSON(history.data().record)))throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
+   });
+   return {revision:outcome.revision,unchanged:outcome.unchanged};
   },
   async ingest(input,{onStage=()=>{}}={}){
    onStage('session-check');const user=uid();onStage('manifest-check');const m=await verifyIntake(input,{space}),receipt=intakeReceipt(m);

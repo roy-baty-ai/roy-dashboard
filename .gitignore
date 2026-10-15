@@ -2,3 +2,5 @@ node_modules/
 vendor/
 *-debug.log
 .firebase/
+node_modules
+private-results/
