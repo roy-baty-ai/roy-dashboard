@@ -1,0 +1,44 @@
+# REVIEW TEMPLATE ONLY: do not activate before docs/unattended-results.md approval.
+name: Roy private results sync
+on:
+  push:
+    branches: [main]
+    paths: [private-results/current-batch.json]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: roy-private-results
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: roy-results-sync
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          path: source
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: roy-baty-ai/roy-dashboard
+          ref: ${{ vars.DASHBOARD_CODE_SHA }}
+          persist-credentials: false
+          path: dashboard
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: dashboard
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: roy-results-signer@roy-dashboard-20261008.iam.gserviceaccount.com
+          create_credentials_file: true
+          cleanup_credentials: true
+      - run: node scripts/run-results-job.mjs ../source/private-results/current-batch.json ../source/private-results/firebase-public-config.json
+        working-directory: dashboard

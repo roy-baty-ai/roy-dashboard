@@ -1,0 +1,74 @@
+  // PROPOSAL ONLY. Insert before the deny-all in the existing finalized Rules.
+  function writer(space) {
+   let a=request.auth;
+   return space == 'real' && a != null && a.uid == 'roy-results-writer-v1'
+    && a.token.firebase.sign_in_provider == 'custom'
+    && a.token.get('roy_writer',false) == true && a.token.get('writer_scope','') == 'results-v1'
+    && timestamp.value(a.token.auth_time * 1000) <= request.time
+    && request.time < timestamp.value(a.token.auth_time * 1000) + duration.value(1,'h')
+    && get(/databases/$(database)/documents/privateRoy/$(space)/control/automation).data.enabled == true;
+  }
+  function businessId(id) { return id in ['web','youtube','note','assets','ventures','operations']; }
+  function observation(m,integer) {
+   return m is map && m.keys().hasAll(['value','observedAt','evidence']) && m.keys().hasOnly(['value','observedAt','evidence'])
+    && m.evidence is string && m.evidence.size() <= 1000
+    && (m.value == null ? (m.observedAt == null && m.evidence == '') :
+     (m.value is number && (!integer || m.value is int) && m.value >= 0 && m.value <= 1000000000
+      && validCheckedAt(m.observedAt) && m.evidence.size() > 0));
+  }
+  function metric(m,key,integer,observed) { return !(key in m) || (observation(m[key],integer) && (observed != null || m[key].value == null)); }
+  function business(d,id) {
+   return d.keys().hasAll(['schemaVersion','businessId','revision','eventId','sourceCommit','state','progress','nextAction','observedAt','evidence','metrics','updatedAt','updatedBy'])
+    && d.keys().hasOnly(['schemaVersion','businessId','revision','eventId','sourceCommit','state','progress','nextAction','observedAt','evidence','metrics','updatedAt','updatedBy'])
+    && businessId(id) && d.businessId == id && d.schemaVersion == 1 && d.revision is int && d.revision > 0 && d.revision <= 1000000
+    && hash(d.eventId) && d.sourceCommit is string && d.sourceCommit.matches('^[0-9a-f]{40}$')
+    && d.state in ['unknown','active','waiting','hold','blocked','complete']
+    && d.progress is string && d.progress.size() <= 2000 && d.nextAction is string && d.nextAction.size() <= 2000
+    && d.evidence is string && d.evidence.size() <= 1000
+    && (d.observedAt == null ? (d.state == 'unknown' && d.evidence == '') : (validCheckedAt(d.observedAt) && d.evidence.size() > 0))
+    && d.metrics is map && d.metrics.keys().hasOnly(['listing_urls','reviewed_records','sent_messages','reply_messages','scheduled_items','published_items','revenue_usd'])
+    && metric(d.metrics,'listing_urls',true,d.observedAt) && metric(d.metrics,'reviewed_records',true,d.observedAt)
+    && metric(d.metrics,'sent_messages',true,d.observedAt) && metric(d.metrics,'reply_messages',true,d.observedAt)
+    && metric(d.metrics,'scheduled_items',true,d.observedAt) && metric(d.metrics,'published_items',true,d.observedAt) && metric(d.metrics,'revenue_usd',false,d.observedAt)
+    && d.updatedBy == request.auth.uid && d.updatedAt == request.time;
+  }
+  match /privateRoy/{space}/control/automation {
+   allow get: if spaceOK(space) && admin();
+   allow list, write: if false;
+  }
+  match /privateRoy/{space}/businesses/{id} {
+   allow get: if spaceOK(space) && (admin() || writer(space));
+   function valid(d) {
+    return active(space) && business(d,id)
+     && getAfter(/databases/$(database)/documents/privateRoy/$(space)/businesses/$(id)/history/$(string(d.revision))).data.record == d;
+   }
+   allow create: if spaceOK(space) && (admin() || writer(space)) && request.resource.data.revision == 1 && valid(request.resource.data);
+   allow update: if spaceOK(space) && (admin() || writer(space)) && request.resource.data.revision == resource.data.revision + 1
+    && request.resource.data.eventId != resource.data.eventId && valid(request.resource.data);
+   allow list, delete: if false;
+   match /history/{revision} {
+    allow get: if spaceOK(space) && (admin() || writer(space));
+    allow create: if spaceOK(space) && (admin() || writer(space)) && active(space)
+     && request.resource.data.keys().hasOnly(['record']) && request.resource.data.record.updatedAt == request.time
+     && revision == string(request.resource.data.record.revision)
+     && getAfter(/databases/$(database)/documents/privateRoy/$(space)/businesses/$(id)).data == request.resource.data.record;
+    allow list, update, delete: if false;
+   }
+  }
+  match /privateRoy/{space}/sync/current {
+   allow get: if spaceOK(space) && (admin() || writer(space));
+   function valid(d) {
+    return d.keys().hasAll(['schemaVersion','revision','state','code','lastSuccessAt','updatedAt','updatedBy'])
+     && d.keys().hasOnly(['schemaVersion','revision','state','code','lastSuccessAt','updatedAt','updatedBy'])
+     && d.schemaVersion == 1 && d.revision is int && d.revision > 0 && d.revision <= 1000000
+     && d.state in ['ok','failed'] && d.code in ['none','validation','conflict','permission-denied','unavailable','source-unavailable']
+     && (d.state == 'ok' ? d.code == 'none' && d.lastSuccessAt == request.time : d.code != 'none')
+     && d.updatedAt == request.time && d.updatedBy == request.auth.uid;
+   }
+   allow create: if spaceOK(space) && (admin() || writer(space)) && active(space) && valid(request.resource.data)
+    && request.resource.data.revision == 1 && (request.resource.data.state == 'ok' || request.resource.data.lastSuccessAt == null);
+   allow update: if spaceOK(space) && (admin() || writer(space)) && active(space) && valid(request.resource.data)
+    && request.resource.data.revision == resource.data.revision+1
+    && (request.resource.data.state == 'ok' || request.resource.data.lastSuccessAt == resource.data.lastSuccessAt);
+   allow list, delete: if false;
+  }

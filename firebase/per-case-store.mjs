@@ -3,12 +3,13 @@ import {recordFreshness} from './freshness.mjs';
 import {aggregate,canonicalJSON} from './store.mjs';
 import {verifyIntake,intakeReceipt,sourceRecord,manualRecord,digest,ROY_UID,stableId,validatePayload} from './intake.mjs';
 import {stageEvidence} from './evidence-validation.mjs';
-export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
+export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic',writerUid=ROY_UID}={}){
+ if(![ROY_UID,'roy-results-writer-v1'].includes(writerUid))throw Error('Invalid writer');
  if(!['real','synthetic'].includes(space))throw Error('Invalid namespace');
  const db=sdk.initializeFirestore(app,{localCache:sdk.memoryLocalCache()}),base=`privateRoy/${space}`;
  const ref=p=>sdk.doc(db,p),fresh=s=>!s.metadata.fromCache&&!s.metadata.hasPendingWrites;
  const watch=(path,next,error)=>sdk.onSnapshot(ref(path),{includeMetadataChanges:true},s=>next(fresh(s)&&s.exists()?s.data():null),error);
- const uid=()=>{if(auth.currentUser?.uid!==ROY_UID)throw Error('Verified Roy session required');return auth.currentUser.uid;};
+ const uid=()=>{if(auth.currentUser?.uid!==writerUid)throw Error('Verified Roy session required');return auth.currentUser.uid;};
  let viewRecords=new Map();
  const api={
   onAuth:fn=>sdk.onIdTokenChanged(auth,fn),
@@ -41,7 +42,7 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
    });
   },
   async saveWorkResult(input){
-   const event=validateWorkResult(input);if(!auth.currentUser)throw Object.assign(Error('unauthenticated'),{code:'unauthenticated'});if(auth.currentUser.uid!==ROY_UID)throw Object.assign(Error('permission-denied'),{code:'permission-denied'});const user=uid();
+   const event=validateWorkResult(input);if(!auth.currentUser)throw Object.assign(Error('unauthenticated'),{code:'unauthenticated'});if(auth.currentUser.uid!==writerUid)throw Object.assign(Error('permission-denied'),{code:'permission-denied'});const user=uid();
    const outcome=await sdk.runTransaction(db,async tx=>{
     const [control,index,current]=await Promise.all([tx.get(ref(`${base}/control/state`)),tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/cases/${event.caseId}`))]);
     if(control.data()?.mode!=='active')throw Object.assign(Error('failed-precondition'),{code:'failed-precondition'});
@@ -114,7 +115,7 @@ export function createPerCaseStore(sdk,app,auth,parse,{space='synthetic'}={}){
    return sdk.runTransaction(db,async tx=>{
     const [index,intake]=await Promise.all([tx.get(ref(`${base}/registry/current`)),tx.get(ref(`${base}/intakes/${m.manifestHash}`))]);
     if(!index.exists()||!Array.isArray(index.data().caseIds)||index.data().caseIds.length>50||index.data().caseIds.some(id=>!stableId(id))||new Set(index.data().caseIds).size!==index.data().caseIds.length||!intake.exists()||canonicalJSON(intake.data())!==canonicalJSON(intakeReceipt(m)))throw Error('Registry/receipt readback mismatch');
-    const rows=[];for(const e of m.entries){const s=await tx.get(ref(`${base}/cases/${e.caseId}`));if(!s.exists())throw Error('Missing case');const r=s.data();const h=await tx.get(ref(`${base}/cases/${e.caseId}/history/${r.revision}`));const expectedSource={repo:m.sourceRepo,commit:m.sourceCommit,path:e.sourcePath,key:e.sourceKey,version:e.sourceVersion,hash:e.sourceHash,intakeId:m.manifestHash};validatePayload(r.payload,e.caseId);if(!index.data().caseIds.includes(e.caseId)||canonicalJSON(r.source)!==canonicalJSON(expectedSource)||r.revision<e.expectedRevision+1||r.updatedBy!==ROY_UID||await digest(r.sourceData)!==e.sourceHash||!h.exists()||canonicalJSON(h.data().record)!==canonicalJSON(r))throw Error('Readback mismatch');rows.push({caseId:e.caseId,revision:r.revision,sourceVersion:r.source.version,status:r.payload.status});}return rows;
+    const rows=[];for(const e of m.entries){const s=await tx.get(ref(`${base}/cases/${e.caseId}`));if(!s.exists())throw Error('Missing case');const r=s.data();const h=await tx.get(ref(`${base}/cases/${e.caseId}/history/${r.revision}`));const expectedSource={repo:m.sourceRepo,commit:m.sourceCommit,path:e.sourcePath,key:e.sourceKey,version:e.sourceVersion,hash:e.sourceHash,intakeId:m.manifestHash};validatePayload(r.payload,e.caseId);if(!index.data().caseIds.includes(e.caseId)||canonicalJSON(r.source)!==canonicalJSON(expectedSource)||r.revision<e.expectedRevision+1||r.updatedBy!==writerUid||await digest(r.sourceData)!==e.sourceHash||!h.exists()||canonicalJSON(h.data().record)!==canonicalJSON(r))throw Error('Readback mismatch');rows.push({caseId:e.caseId,revision:r.revision,sourceVersion:r.source.version,status:r.payload.status});}return rows;
    });
   }
  };

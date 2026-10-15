@@ -73,14 +73,7 @@ verified repeats are idempotent. No automatic retry of ambiguous failures occurs
 - No live authenticated session is available through this worker's tools.
   Production control/registry, actual case mapping and deployed Rules must be
   read in the existing approved session before live verification.
-- The existing schema is restricted to `roy-web-NNNN` cases. Global prospect
-  pools and non-sales business progress have no approved private document schema.
-  They remain explicitly **unavailable**, never zero or refreshed public JSON.
-  Do not encode other businesses as fake sales cases or hide global metrics in
-  an unrelated customer's note.
-- Parent decision required before merge/Pages publication. Completing business
-  progress needs a reviewed private summary schema (typed metric value/unit/
-  observation time/evidence, business state/next action/observation time, source
-  revision, server update time and sync result), with the same admin-only guard
-  and revisioned history. Changing deployed Rules/permissions or enabling an
-  unattended connection is outside this change's authorization.
+- The original sales schema remains bounded to 50 cases. Proposed private business
+  summaries and unattended worker implementation are documented in
+  [unattended-results.md](unattended-results.md). They require separately reviewed
+  Rules/IAM/workflow activation; production configuration remains unchanged.

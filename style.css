@@ -12,3 +12,5 @@
 
 .focus-action{margin-top:18px}
 .map-pins .pin text{font-size:12px}
+
+.business-progress{margin:20px 0}.business-progress article{padding:12px 0;border-top:1px solid var(--border);overflow-wrap:anywhere}
