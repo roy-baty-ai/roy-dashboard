@@ -92,3 +92,11 @@ test('offline private builder labels the stable footer as private with synthetic
   }
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+
+test('work progress is rendered from recorded receipt without inventing completion time',()=>{
+ const receipt={progress:'Synthetic private QA complete',evidence:['Synthetic task reference'],completedAt:null,receivedAt:'2026-10-14T02:00:00Z'};
+ const row={business_name:'Synthetic only',sent:false,status:'NOT_READY',internal_note:'ROY_WORK_RESULT '+JSON.stringify(receipt)};
+ const one=parse({schema_version:1,cases:[row]})[0];assert.equal(one.workProgress.progress,receipt.progress);assert.equal(one.workProgress.completedAt,null);assert.equal(one.workProgress.receivedAt,receipt.receivedAt);assert.equal(one.state,'preparing');
+ assert.equal(parse({schema_version:1,cases:[{...row,internal_note:'ROY_WORK_RESULT invalid'}]})[0].workProgress,null);
+});

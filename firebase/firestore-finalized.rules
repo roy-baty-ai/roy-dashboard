@@ -63,7 +63,8 @@ service cloud.firestore {
   }
   function record(d,caseId) {
    let s=d.source;
-   return d.keys().hasOnly(['schemaVersion','revision','source','sourceData','payload','changeKind','operationId','updatedBy','updatedAt'])
+   return d.keys().hasAll(['schemaVersion','revision','source','sourceData','payload','changeKind','operationId','updatedBy','updatedAt'])
+    && d.keys().hasOnly(['schemaVersion','revision','source','sourceData','payload','changeKind','operationId','updatedBy','updatedAt'])
     && d.schemaVersion == 2 && d.revision is int && d.revision > 0 && d.revision <= 1000000
     && s.keys().hasOnly(['repo','commit','path','key','version','hash','intakeId'])
     && s.repo == 'roy-baty-ai/roy-lab' && s.commit.matches('^[0-9a-f]{40}$')
@@ -203,7 +204,7 @@ service cloud.firestore {
     allow get: if spaceOK(space) && admin();
     allow create: if spaceOK(space) && admin() && active(space)
      && request.resource.data.keys().hasOnly(['record']) && revision == string(request.resource.data.record.revision)
-     && request.resource.data.record.updatedAt == request.time
+     && request.resource.data.record.get('updatedAt',null) == request.time
      && getAfter(/databases/$(database)/documents/privateRoy/$(space)/cases/$(caseId)).data == request.resource.data.record;
     allow list, update, delete: if false;
    }

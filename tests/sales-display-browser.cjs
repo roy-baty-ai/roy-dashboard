@@ -19,7 +19,7 @@ export const runTransaction=async()=>{throw Error('Writes disabled in display te
 export class GoogleAuthProvider{};
 export async function signInWithPopup(){auth.currentUser={uid};for(const fn of [...authListeners])fn(auth.currentUser);}
 export async function signOut(){const stale=[...retired,...listeners];retired.clear();auth.currentUser=null;for(const fn of [...authListeners])fn(null);setTimeout(()=>stale.forEach(x=>{staleDelivered++;deliver(x);}),25);}
-window.__displayTest={setMode(value){mode=value;for(const x of [...listeners])if(x.p===base+'/registry/current')deliver(x);},staleDelivered:()=>staleDelivered,listenerCount:()=>listeners.size};
+window.__displayTest={completeWork(){rows[0].next_action='Synthetic next work after QA';rows[0].internal_note='ROY_WORK_RESULT '+JSON.stringify({progress:'Synthetic private QA completed',evidence:['Synthetic task evidence'],completedAt:null,receivedAt:'2026-10-14T02:00:00Z'});for(const x of [...listeners])if(x.p===base+'/cases/roy-web-0001')deliver(x);},setMode(value){mode=value;for(const x of [...listeners])if(x.p===base+'/registry/current')deliver(x);},staleDelivered:()=>staleDelivered,listenerCount:()=>listeners.size};
 `;
 const config='window.RoyFirebaseConfig='+JSON.stringify({enabled:true,storageVersion:2,testOnly,authProvider:'google',firebase:{apiKey:'synthetic',authDomain:'example.invalid',projectId:'demo-roy-local',appId:'synthetic'}})+';';
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -87,7 +87,10 @@ async function until(fn,label,attempts=120){for(let i=0;i<attempts;i++){if(await
    await evaluate("document.querySelector('#map-filter').value='sales:interested';document.querySelector('#map-filter').dispatchEvent(new Event('change'))");
    assert.equal(await evaluate("document.querySelectorAll('#unmapped-cases button').length"),1);
    await evaluate("document.querySelector('#unmapped-cases button').click()");
-   const detail=await evaluate("document.querySelector('#drawer-content').textContent");assert.match(detail,/分精度・秒不明/);assert.match(detail,/2026-10-13 15:22\+09:00/);assert.doesNotMatch(detail,/15:22:00/);assert.match(detail,/不明（確認済みの位置情報なし）/);
+   await evaluate("document.querySelector('#close-drawer').click();window.__displayTest.completeWork()");
+   await until(()=>evaluate("document.querySelector('#all-rows').textContent.includes('Synthetic next work after QA')"),'live work update without reload');
+   await evaluate("document.querySelector('#unmapped-cases button').click()");
+   const detail=await evaluate("document.querySelector('#drawer-content').textContent");assert.match(detail,/Synthetic private QA completed/);assert.match(detail,/Synthetic task evidence/);assert.match(detail,/未取得（結果受領日時とは別）/);assert.match(detail,/分精度・秒不明/);assert.match(detail,/2026-10-13 15:22\+09:00/);assert.doesNotMatch(detail,/15:22:00/);assert.match(detail,/不明（確認済みの位置情報なし）/);
    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth"),true,'drawer overflow '+width);
    const detailImage=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(output,'detail-'+width+'.png'),Buffer.from(detailImage.data,'base64'));
    await evaluate("document.querySelector('#close-drawer').click();document.querySelector('[data-view=\"settings\"]').click();document.querySelector('#firebase-logout').click()");await wait(80);

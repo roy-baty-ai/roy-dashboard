@@ -1,3 +1,4 @@
+import {operationsRules} from '../scripts/build-operations-rules.mjs';
 import {test,beforeEach,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -8,7 +9,7 @@ import {evidenceDocuments,stageEvidence} from '../firebase/evidence-validation.m
 import {digest,ROY_UID,GATE_CODES,intakeReceipt,sourceRecord} from '../firebase/intake.mjs';
 
 assert.ok(!process.env.FIRESTORE_EMULATOR_HOST||process.env.FIRESTORE_EMULATOR_HOST==='127.0.0.1:8085');
-const env=await initializeTestEnvironment({projectId:'demo-roy-local',firestore:{host:'127.0.0.1',port:8085,rules:readFileSync(new URL('../firebase/firestore-finalized.rules',import.meta.url),'utf8')}});
+const env=await initializeTestEnvironment({projectId:'demo-roy-local',firestore:{host:'127.0.0.1',port:8085,rules:process.env.ROY_RULES_VARIANT==='operations'?await operationsRules():readFileSync(new URL('../firebase/firestore-finalized.rules',import.meta.url),'utf8')}});
 after(()=>env.cleanup());
 const claims={email_verified:true,email:'roy.lab.20261001@gmail.com',firebase:{sign_in_provider:'google.com'}};
 const db=(uid=ROY_UID,token=claims)=>uid?env.authenticatedContext(uid,token).firestore():env.unauthenticatedContext().firestore();
