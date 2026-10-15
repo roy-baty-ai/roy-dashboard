@@ -66,8 +66,14 @@ const root=path.resolve(__dirname,'..');
   await env.withSecurityRulesDisabled(async context=>sdk.updateDoc(sdk.doc(context.firestore(),base+'/control/state'),{mode:'paused'}));
   await writer.waitForFunction(()=>document.querySelector('#result-feed-status').textContent.includes('同期停止'));
   feed.items.push({kind:'work-result',value:event(3)});await new Promise(r=>setTimeout(r,5500));assert.equal((await sdk.getDoc(sdk.doc(db,base+'/cases/'+caseId))).data().revision,4);
+  await context.setOffline(true);
+  for(const page of [writer,viewer])await page.waitForFunction(()=>document.querySelector('#firebase-status').textContent.includes('接続断')&&document.querySelector('#firebase-case').options.length===0);
+  assert.equal(await viewer.locator('#firebase-next').inputValue(),'');
+  await context.setOffline(false);
+  for(const page of [writer,viewer])await page.waitForFunction(()=>document.querySelector('#firebase-next').value==='Synthetic reply next');
+  assert.equal(navigations,2,'offline recovery does not reload');
   await viewer.locator('[data-view="settings"]').click();await viewer.locator('#firebase-logout').click();await viewer.waitForFunction(()=>document.querySelector('#firebase-case').options.length===0);
   assert.equal(await viewer.locator('#firebase-next').inputValue(),'');assert.equal(await viewer.evaluate(()=>localStorage.length+sessionStorage.length),0);
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({pass:true,emulator:'demo-roy-local',writes:3,verifiedHistory:[2,3,4],sourceIntakeAndReply:true,pagesWithoutReload:2,widths:[1440,393],pauseStops:true,logoutClears:true,productionTest:false}));
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({pass:true,emulator:'demo-roy-local',writes:3,verifiedHistory:[2,3,4],sourceIntakeAndReply:true,pagesWithoutReload:2,widths:[1440,393],pauseStops:true,offlineClears:true,onlineRestoresWithoutReload:true,logoutClears:true,productionTest:false}));
  }finally{await browser.close();await new Promise(r=>server.close(r));await env.cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

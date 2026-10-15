@@ -83,3 +83,11 @@ test('intake progress cannot report verified before successful server readback',
  assert.equal(events[0].state,'importing');assert.ok(events.some(x=>x.state==='partial'&&x.completed===1));assert.equal(events.at(-1).state,'verified');
  const failed=[];api.readback=async()=>{throw Error('private failure body');};assert.equal((await ingestAndVerify(api,m,{onProgress:p=>failed.push(p)})).ok,false);assert.ok(!failed.some(x=>x.state==='verified'));assert.equal(failed.at(-1).state,'partial');assert.ok(!JSON.stringify(failed).includes('private failure body'));
 });
+
+test('network suspension clears immediately, rejects delayed callbacks and reconnects only current identity',async()=>{
+ const f=fixture();f.auth({uid:'owner'});f.access(true);f.data({payload:{cases:[]},revision:1});assert.ok(f.shown);
+ const stale=f.data;f.session.suspend();assert.equal(f.shown,null);assert.match(f.messages.at(-1),/接続断/);stale({payload:{private:'stale'},revision:2});assert.equal(f.shown,null);
+ await assert.rejects(f.session.save('one',{}));f.auth({uid:'replacement'});assert.equal(f.shown,null);assert.match(f.messages.at(-1),/接続断/);
+ f.session.reconnect();f.access(true);f.data({payload:{fresh:true},revision:3});assert.deepEqual(f.shown,{fresh:true});
+ f.session.suspend();f.auth(null);f.session.reconnect();assert.equal(f.shown,null);assert.match(f.messages.at(-1),/未認証/);
+});

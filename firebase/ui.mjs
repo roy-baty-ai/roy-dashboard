@@ -84,6 +84,9 @@ try {
       }
     };
     session=createSession(store,view);
+    window.addEventListener('offline',()=>session?.suspend());
+    window.addEventListener('online',()=>session?.reconnect());
+    if(navigator.onLine===false)session.suspend();
     const publicResult=data=>{if(config.testOnly){el('firebase-test-summary').textContent=data?`架空試験結果（実績ではありません）：revision ${data.revision}・READY ${data.readyCount}・準備中 ${data.preparingCount}・送信 ${data.sentCount}・URL ${data.previewCount}`:'架空公開集計は未作成または未取得です。初回の正常更新後に作成します。';}else window.RoyOutboundView.summary(data);};
     if(!perCase)stopPublic=store.watchPublic(publicResult,()=>publicResult(null));
     el('firebase-login').disabled=false;el('firebase-logout').disabled=false;

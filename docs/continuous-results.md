@@ -43,7 +43,10 @@ from a draft or a reply from lack of observations. The producer does no sending.
    authenticated dashboards receive onSnapshot updates without reloading.
 
 The file handle/auth remain in memory. Closing the tab ends synchronization;
-background tabs can be throttled. This is a session-bound bridge, not an
+background tabs can be throttled. An offline browser event immediately clears
+private views and stops the feed. Online recovery rechecks the existing identity
+and server authorization without reloading; restarting the writer requires
+reselecting the feed. This is a session-bound bridge, not an
 unattended service. A persistent agent writer remains blocked until the parent
 selects an already-authorized runtime connection. No service-account key,
 refresh token, new login grant, local endpoint or credential export is needed by

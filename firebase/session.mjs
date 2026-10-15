@@ -3,7 +3,8 @@ export function createSession(api, view) {
   let stream = 0, epoch = 0, stopControl = () => {}, stopAccess = () => {}, stopData = () => {}, current = null, record = null;
   function wipe(message) { record = null; view.clear(); view.state(message); }
   function reset(message) { epoch++; stream++; stopAccess(); stopData(); stopControl(); view.control?.(null); stopAccess = stopData = () => {}; current = null; wipe(message); }
-  const stopAuth = api.onAuth(user => {
+  let lastUser=null,suspended=false;
+  function connect(user) {
     reset(user ? '管理者権限を確認中…' : '未認証：内部案件は表示しません。');
     if (!user) return;
     current = user; const token = epoch;
@@ -18,8 +19,15 @@ export function createSession(api, view) {
         try { view.show(value.payload,value.freshness); record = value; view.state(`認証済み・Firestore revision ${value.revision}（サーバー記録の受信。業務情報の最新確認ではありません）`); } catch { wipe('内部データの形式を確認できません。表示を消去しました。'); }
       }, () => { if (token === epoch && generation === stream) { stream++; wipe('権限または接続を確認できません。内部表示を消去しました。'); } });
     }, () => { if (token === epoch) { stream++; stopData(); stopControl(); view.control?.(null); wipe('管理者権限を確認できません。内部表示を消去しました。'); } });
+  }
+  const stopAuth = api.onAuth(user => {
+    lastUser=user;
+    if(suspended)reset('接続断：内部表示と同期を停止しました。');
+    else connect(user);
   });
   return {
+    suspend() { suspended=true;reset('接続断：内部表示と同期を停止しました。'); },
+    reconnect() { if(!suspended)return;suspended=false;connect(lastUser); },
     async save(id, patch) {
       if (!current || !record) throw Error('認証と最新データの確認が必要です。');
       const version = epoch, revision = record.revision;
