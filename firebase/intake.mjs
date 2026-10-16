@@ -16,9 +16,9 @@ export function validatePayload(p,id){
  }
  if(p.confirmed_gates.some(g=>p.missing_gates.some(m=>m.code===g.code)))fail('Gate cannot be confirmed and missing');
  if(!Array.isArray(p.restrictions)||p.restrictions.length>32||p.restrictions.some(v=>typeof v!=='string'||!v||v.length>2000))fail('Restrictions required');
- if(typeof p.confirmed_revenue_usd!=='number'||!Number.isFinite(p.confirmed_revenue_usd)||p.confirmed_revenue_usd<0||p.confirmed_revenue_usd>1000000000)fail('Confirmed revenue must be numeric');
+ if(p.confirmed_revenue_usd!==null&&(typeof p.confirmed_revenue_usd!=='number'||!Number.isFinite(p.confirmed_revenue_usd)||p.confirmed_revenue_usd<0||p.confirmed_revenue_usd>1000000000))fail('Confirmed revenue must be numeric');
  if(typeof p.sent!=='boolean'||!['NOT_READY','READY_FOR_HUMAN_GO','SENT_WAITING'].includes(p.status)||p.readiness!==p.status||p.sent!==(p.status==='SENT_WAITING'))fail('Inconsistent state');
- if(p.sent&&(!p.sent_evidence||!p.email?.sent_at))fail('Sent proof required');
+ if(p.sent&&(!p.sent_evidence||typeof p.sent_evidence!=='object'||Array.isArray(p.sent_evidence)||!p.email||!(p.email.sent_at===null||(typeof p.email.sent_at==='string'&&p.email.sent_at.length>0))))fail('Sent proof required');
  if(!p.sent&&p.sent_evidence!==null)fail('Unsent case cannot claim sent proof');
  if(p.preview_url!==null&&!globalThis.OutboundModel.safeUrl(p.preview_url))fail('Invalid preview');
  if(p.status==='READY_FOR_HUMAN_GO'&&(!globalThis.OutboundModel.safeUrl(p.preview_url)||!globalThis.OutboundModel.validDate(p.last_checked_at)))fail('Valid READY URL/time required');
@@ -43,10 +43,21 @@ export async function verifyIntake(input,{space}={}){
  return m;
 }
 export function intakeReceipt(m){return {schemaVersion:1,space:m.space,sourceRepo:m.sourceRepo,sourceCommit:m.sourceCommit,finalization:m.finalization,entries:Object.fromEntries(m.entries.map(e=>[e.caseId,{expectedRevision:e.expectedRevision,sourceVersion:e.sourceVersion,sourceHash:e.sourceHash,sourcePath:e.sourcePath,sourceKey:e.sourceKey}]))};}
+// Source-only enrichment: fill an explicitly unknown sent time once, preserving
+// all other email fields, original send evidence, offer, and prior history.
+export function sourceEmailPreserved(a,b){
+ if(canonicalJSON(a)===canonicalJSON(b))return true;
+ if(a?.sent_at!==null||!b||typeof b.sent_at!=='string')return false;
+ const {sent_at:at,sent_at_precision:ap,...ar}=a;
+ const {sent_at:bt,sent_at_precision:bp,...br}=b;
+ const minute=bp==='minute'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/.test(bt);
+ const valid=minute?globalThis.OutboundModel.validDate(bt.replace(/(T\d{2}:\d{2})(Z|[+-]\d{2}:\d{2})$/,'$1:00$2')):globalThis.OutboundModel.validDate(bt)&&(bp===undefined||bp===null||bp==='second');
+ return valid&&(ap===undefined||ap===null)&&canonicalJSON(ar)===canonicalJSON(br);
+}
 export function sourceRecord(old,e,m){
  if(old&&old.source.version===e.sourceVersion&&old.source.hash===e.sourceHash&&old.source.intakeId===m.manifestHash)return {unchanged:true,record:old};
  if((old?.revision||0)!==e.expectedRevision||e.sourceVersion!==(old?.source.version||0)+1)fail('Revision/source version conflict');
- if(old?.payload.sent&&(!e.payload.sent||canonicalJSON(e.payload.sent_evidence)!==canonicalJSON(old.payload.sent_evidence)||canonicalJSON(e.payload.email)!==canonicalJSON(old.payload.email)||canonicalJSON(e.payload.offer)!==canonicalJSON(old.payload.offer)))fail('Sent evidence is immutable');
+ if(old?.payload.sent&&(!e.payload.sent||canonicalJSON(e.payload.sent_evidence)!==canonicalJSON(old.payload.sent_evidence)||!sourceEmailPreserved(old.payload.email,e.payload.email)||canonicalJSON(e.payload.offer)!==canonicalJSON(old.payload.offer)))fail('Sent evidence is immutable');
  if(old&&!old.payload.restrictions.every(v=>e.payload.restrictions.includes(v)))fail('Restrictions cannot be removed');
  if(old&&!old.payload.confirmed_gates.every(v=>e.payload.confirmed_gates.some(n=>canonicalJSON(n)===canonicalJSON(v))))fail('Keep dated evidence; supersede explicitly');
  const payload=structuredClone(e.payload);if(old)payload.internal_note=old.payload.internal_note;
