@@ -63,6 +63,7 @@ const root=path.resolve(__dirname,'..');
   feed.items.push({kind:'intake',value:updated});
   for(const page of [writer,viewer])await page.waitForFunction(()=>document.querySelector('#firebase-next').value==='Synthetic reply next'&&document.querySelector('#all-rows').textContent.includes('関心返信'),null,{timeout:20000});
   assert.equal((await sdk.getDoc(sdk.doc(db,base+'/cases/'+caseId))).data().revision,4);
+  for(const page of [writer,viewer]){const observation=JSON.parse(await page.locator('#registry-inspection-output').textContent());assert.equal(observation.control.mode,'active');assert.equal(observation.control.allowSourceIngest,true);assert.equal(observation.cases[0].caseId,caseId);assert.equal(observation.cases[0].revision,4);assert.equal(observation.cases[0].sourceVersion,2);assert.ok(!('payload' in observation.cases[0]));}
   const writerDb=env.authenticatedContext(WRITER_UID,{roy_writer:true,writer_scope:'results-v1',auth_time:Math.floor(Date.now()/1000),firebase:{sign_in_provider:'custom'}}).firestore();
   const businesses=createOperationsStore(sdk,writerDb,{currentUser:{uid:WRITER_UID}},{space:'real'});
   const business={schemaVersion:1,businessId:'youtube',expectedRevision:0,sourceCommit:'a'.repeat(40),state:'active',progress:'Synthetic scheduled progress',nextAction:'Synthetic publication check',observedAt:'2026-10-15T00:03:00Z',evidence:'Synthetic evidence',metrics:{scheduled_items:{value:2,observedAt:'2026-10-15T00:03:00Z',evidence:'Synthetic schedule'},published_items:{value:null,observedAt:null,evidence:''}}};
@@ -79,12 +80,14 @@ const root=path.resolve(__dirname,'..');
   await context.setOffline(true);
   for(const page of [writer,viewer])await page.waitForFunction(()=>document.querySelector('#firebase-status').textContent.includes('接続断')&&document.querySelector('#firebase-case').options.length===0);
   assert.equal(await viewer.locator('#firebase-next').inputValue(),'');assert.ok(!(await viewer.locator('#business-progress').innerText()).includes('Synthetic'));
+  for(const page of [writer,viewer]){assert.equal(await page.locator('#registry-inspection-output').textContent(),'');assert.equal(await page.locator('#registry-inspection').evaluate(el=>el.hidden),true);}
   await context.setOffline(false);
   for(const page of [writer,viewer])await page.waitForFunction(()=>document.querySelector('#firebase-next').value==='Synthetic reply next');
   await viewer.waitForFunction(()=>document.querySelector('#business-progress').textContent.includes('公開確認：1'));
   assert.equal(navigations,2,'offline recovery does not reload');
   await viewer.locator('[data-view="settings"]').click();await viewer.locator('#firebase-logout').click();await viewer.waitForFunction(()=>document.querySelector('#firebase-case').options.length===0);
   assert.equal(await viewer.locator('#firebase-next').inputValue(),'');assert.equal(await viewer.evaluate(()=>localStorage.length+sessionStorage.length),0);
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({pass:true,emulator:'demo-roy-local',writes:3,verifiedHistory:[2,3,4],sourceIntakeAndReply:true,headlessBusinessWriter:true,scheduledVsPublished:true,pagesWithoutReload:2,widths:[1440,393],pauseStops:true,offlineClears:true,onlineRestoresWithoutReload:true,logoutClears:true,productionTest:false}));
+  assert.equal(await viewer.locator('#registry-inspection-output').textContent(),'');assert.equal(await viewer.locator('#registry-inspection').evaluate(el=>el.hidden),true);
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({pass:true,emulator:'demo-roy-local',writes:3,verifiedHistory:[2,3,4],sourceIntakeAndReply:true,headlessBusinessWriter:true,scheduledVsPublished:true,pagesWithoutReload:2,widths:[1440,393],pauseStops:true,offlineClears:true,onlineRestoresWithoutReload:true,logoutClears:true,registryMetadataAndClear:true,productionTest:false}));
  }finally{await browser.close();await new Promise(r=>server.close(r));await env.cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

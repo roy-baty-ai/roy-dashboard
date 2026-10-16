@@ -1,3 +1,4 @@
+import {createRegistryInspectionView} from './registry-inspection.mjs';
 import {createOperationsStore} from './operations.mjs';
 import {createOperationsView} from './operations-ui.mjs';
 import {attachResultFeed} from './result-feed.mjs';
@@ -28,6 +29,7 @@ try {
       el('firebase-logout').onclick=async()=>{window.RoyOutboundView.clear();await sdk.signOut(auth);};
     }else{
     const store=perCase?createPerCaseStore(sdk,app,auth,window.OutboundModel.parse,{space:config.testOnly?'synthetic':'real'}):createStore(sdk,app,auth,window.OutboundModel.parse,{testOnly:config.testOnly===true,testSourceHashes:TEST_SOURCE_HASHES});
+    const registryInspection=perCase?createRegistryInspectionView(el('firebase-panel')):null;
     if(perCase&&config.operationsVersion===1){Object.assign(store,createOperationsStore(sdk,sdk.getFirestore(app),auth,{space:config.testOnly?'synthetic':'real'}));operationsView=createOperationsView();}
     if(perCase){
       el('firebase-panel').querySelector('h3').textContent=config.testOnly?'架空案件の接続確認':'案件の共有記録';
@@ -64,16 +66,16 @@ try {
     if(perCase)resultFeed=attachResultFeed({store,space:config.testOnly?'synthetic':'real',canWrite:()=>auth.currentUser?.uid===ROY_UID&&sourceControl?.mode==='firestore'&&freshness!==null});
     freshnessTimer=setInterval(()=>{if(freshness)el('private-sync-state').textContent=freshnessText(freshness,sourceControl);},30000);
     const view={
-      clear(){ freshness=null;el('private-sync-state').textContent='';el('private-sync-state').hidden=true;window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-test-summary').textContent='';el('firebase-editor').hidden=true;el('firebase-case').onchange=null;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';el('firebase-state').value='NOT_READY';selectedCase=null; },
+      clear(){ registryInspection?.clear();freshness=null;el('private-sync-state').textContent='';el('private-sync-state').hidden=true;window.RoyOutboundView.clear();el('firebase-test-summary').hidden=true;el('firebase-test-summary').textContent='';el('firebase-editor').hidden=true;el('firebase-case').onchange=null;el('firebase-case').replaceChildren();el('firebase-next').value='';el('firebase-note').value='';el('firebase-gates').replaceChildren();el('firebase-checked').value='';el('firebase-state').value='NOT_READY';selectedCase=null; },
       state,
       operations(value){operationsView?.show(value);},
       control(value) {
-        sourceControl=value;if(value?.mode!=='firestore')resultFeed?.stop();if(freshness)el('private-sync-state').textContent=freshnessText(freshness,value);if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
+        sourceControl=value;registryInspection?.control(value);if(value?.mode!=='firestore')resultFeed?.stop();if(freshness)el('private-sync-state').textContent=freshnessText(freshness,value);if(el('firebase-inspect-result'))el('firebase-inspect-result').textContent='';pendingImport=null;if(inspectButton)inspectButton.disabled=true;if(inspectFile)inspectFile.value='';importGeneration++;el('firebase-import-save').disabled=true;el('firebase-import-result').textContent='';el('firebase-import-file').value='';
         el('firebase-import').hidden=perCase?!(value?.mode==='firestore'&&value?.allowSourceIngest):value?.mode!=='migration';
         el('firebase-save').disabled=value?.mode!=='firestore';
       },
       show(payload,info){
-        freshness=info||null;el('private-sync-state').hidden=false;el('private-sync-state').textContent=freshnessText(freshness,sourceControl);
+        registryInspection?.control(sourceControl);registryInspection?.show(info?.registryObservation);freshness=info||null;el('private-sync-state').hidden=false;el('private-sync-state').textContent=freshnessText(freshness,sourceControl);
         window.RoyOutboundView.show(payload,config.testOnly?'架空データ試験（実績ではありません）':'Firestore参照（正本切替は別途確認）',config.testOnly?'synthetic':'private');
         el('firebase-test-summary').hidden=!(config.testOnly||perCase);
         if(perCase){const sent=payload.cases.filter(c=>c.sent).length,ready=payload.cases.filter(c=>!c.sent&&c.status==='READY_FOR_HUMAN_GO').length;el('firebase-test-summary').textContent=`管理者内の集計：${payload.cases.length}件・送信済み${sent}・READY ${ready}・準備中${payload.cases.length-sent-ready}`;}
