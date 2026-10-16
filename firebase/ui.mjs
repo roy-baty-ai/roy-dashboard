@@ -1,3 +1,4 @@
+import {loginFailureText} from './auth-guidance.mjs';
 import {createRegistryInspectionView} from './registry-inspection.mjs';
 import {createOperationsStore} from './operations.mjs';
 import {createOperationsView} from './operations-ui.mjs';
@@ -20,12 +21,12 @@ try {
     if(!perCase&&!config.authOnly&&!config.testOnly)window.RoyOutboundView.summary(null);
     const sdk=await import('../vendor/firebase-sdk.js');
     const app=sdk.initializeApp(config.firebase),auth=sdk.getAuth(app);
-    await sdk.setPersistence(auth,sdk.inMemoryPersistence);
+    await sdk.setPersistence(auth,sdk.browserSessionPersistence);
     if(config.authOnly){
       state('認証確認版：データベースは全拒否のままです。Googleログインで本人のUIDを確認できます。');
       el('firebase-login').disabled=false;el('firebase-logout').disabled=false;
       stopPublic=sdk.onIdTokenChanged(auth,user=>{window.RoyOutboundView.clear();state(user?`ログイン成功・管理者登録待ち。UID: ${user.uid} ／ メール: ${user.email || '未取得'} ／ メール確認: ${user.emailVerified?'済':'未確認'}。データベースには接続していません。`:'未ログイン。認証確認のみを行います。データベースは全拒否のままです。');});
-      el('firebase-login').onclick=async()=>{try{await sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}catch{state('ログインできません。ポップアップ・許可ドメイン・認証設定を確認してください。');}};
+      el('firebase-login').onclick=async()=>{try{await sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}catch(error){state(loginFailureText(error));}};
       el('firebase-logout').onclick=async()=>{window.RoyOutboundView.clear();await sdk.signOut(auth);};
     }else{
     const store=perCase?createPerCaseStore(sdk,app,auth,window.OutboundModel.parse,{space:config.testOnly?'synthetic':'real'}):createStore(sdk,app,auth,window.OutboundModel.parse,{testOnly:config.testOnly===true,testSourceHashes:TEST_SOURCE_HASHES});
@@ -33,7 +34,7 @@ try {
     if(perCase&&config.operationsVersion===1){Object.assign(store,createOperationsStore(sdk,sdk.getFirestore(app),auth,{space:config.testOnly?'synthetic':'real'}));operationsView=createOperationsView();}
     if(perCase){
       el('firebase-panel').querySelector('h3').textContent=config.testOnly?'架空案件の接続確認':'案件の共有記録';
-      el('firebase-panel').querySelector('p').textContent='案件は管理者だけが閲覧できます。保存は営業GOやメール送信ではありません。公開概要は従来の集計です。';
+      el('firebase-panel').querySelector('p').textContent=(config.testOnly?'架空データの接続試験です。実績ではありません。':'本番DBに保存済みの実案件を管理者だけが閲覧できます。記録が古い場合もあります。ログインはGmailの収集や最新営業原本の取込みを実行しません。');
       el('firebase-import').querySelector('h4').textContent='確定した原本の取込み';
       el('firebase-import').querySelector('p').textContent='Royが確定したファイルを照合します。変更前の記録は履歴に残り、競合時は保存を止めます。';
       el('firebase-import-check').textContent='原本と取込み内容を照合';el('firebase-import-save').textContent='照合済みの内容を保存';
@@ -96,7 +97,7 @@ try {
     const publicResult=data=>{if(config.testOnly){el('firebase-test-summary').textContent=data?`架空試験結果（実績ではありません）：revision ${data.revision}・READY ${data.readyCount}・準備中 ${data.preparingCount}・送信 ${data.sentCount}・URL ${data.previewCount}`:'架空公開集計は未作成または未取得です。初回の正常更新後に作成します。';}else window.RoyOutboundView.summary(data);};
     if(!perCase)stopPublic=store.watchPublic(publicResult,()=>publicResult(null));
     el('firebase-login').disabled=false;el('firebase-logout').disabled=false;
-    el('firebase-login').onclick=async()=>{try {await sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}catch {state('ログインできません。認証設定・許可ドメインを確認してください。');}};
+    el('firebase-login').onclick=async()=>{try {await sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}catch(error){state(loginFailureText(error));}};
     el('firebase-logout').onclick=()=>session.logout().catch(()=>state('画面を消去しました。認証接続を確認してください。'));
     el('firebase-save').onclick=async()=>{el('firebase-save').disabled=true;try{
       if(!selectedCase)throw Error('案件を確認してください。');
