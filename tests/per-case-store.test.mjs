@@ -96,3 +96,9 @@ for(const source of ['../firebase/sdk-entry.js','../vendor/firebase-sdk.js']){
   assert.equal(reported.filter(r=>r.result==='PASS').length,6);
  });
 }
+test('unknown revenue remains unknown in the live snapshot summary',async()=>{
+ const f=fake(),m=await manifest();m.entries[0].payload.confirmed_revenue_usd=null;m.entries[0].sourceHash=await digest(m.entries[0].payload);delete m.manifestHash;m.manifestHash=await digest(m);await f.store.ingest(m);
+ let shown;const stop=f.store.watchPrivate(v=>shown=v,e=>{throw e;});
+ for(const path of ['privateRoy/synthetic/registry/current','privateRoy/synthetic/cases/roy-web-0001'])f.watches.get(path).next({metadata:{fromCache:false,hasPendingWrites:false},exists:()=>true,data:()=>structuredClone(f.docs.get(path))});
+ assert.equal(shown.payload.summary.operating_revenue_usd_last_recorded,null);stop();
+});

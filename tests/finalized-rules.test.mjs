@@ -149,3 +149,21 @@ for(const [name,change,sent=false] of [
  await deny(rawSourceUpdate(d,old,m));assert.equal((await current(d)).revision,old.revision);assert.equal((await sdk.getDoc(sdk.doc(d,`${base}/intakes/${m.manifestHash}`))).exists(),false);
  const good=await manifest(()=>{},old);await stage(d,good);await rawSourceUpdate(d,old,good);assert.equal((await current(d)).revision,old.revision+1);
 });
+test('minimal confirmed send permits explicit unknown facts and retains history',async()=>{
+ const d=db(),m=await manifest(p=>{p.sent=true;p.status=p.readiness='SENT_WAITING';p.confirmed_revenue_usd=null;p.sent_evidence={kind:'synthetic-confirmation',observed_at:'2026-10-16T00:00:00Z'};p.email={sent_at:null,subject:'Synthetic'};});
+ await api(d).ingest(m);const row=await current(d);assert.equal(row.payload.confirmed_revenue_usd,null);assert.equal(row.payload.email.sent_at,null);assert.equal('body' in row.payload.email,false);
+ await manual(d,row,r=>{r.payload.internal_note='Synthetic editorial edit';});
+ const after=await current(d);assert.equal(after.payload.email.sent_at,null);
+ await deny(manual(d,after,r=>{r.payload.email.sent_at='2026-10-16T00:00:00Z';}));
+});
+for(const [label,change] of [['missing sent_at',p=>delete p.email.sent_at],['empty sent_at',p=>p.email.sent_at=''],['string revenue',p=>p.confirmed_revenue_usd='0'],['negative revenue',p=>p.confirmed_revenue_usd=-1]])test('minimal send rejects '+label,async()=>{
+ const d=db(),m=await manifest(p=>{p.sent=true;p.status=p.readiness='SENT_WAITING';p.confirmed_revenue_usd=null;p.sent_evidence={kind:'synthetic'};p.email={sent_at:null};});await stage(d,m);await pairedCreateDenial(d,m,w=>change(w[2].data.payload));
+});
+for(const precision of ['second','minute'])test('source fills unknown sent time once at '+precision+' precision',async()=>{
+ const d=db(),m=await manifest(p=>{p.sent=true;p.status=p.readiness='SENT_WAITING';p.confirmed_revenue_usd=null;p.sent_evidence={kind:'synthetic'};p.email={sent_at:null,subject:'Keep'};});await api(d).ingest(m);const old=await current(d);
+ const n=await manifest(p=>{p.email.sent_at=precision==='minute'?'2026-10-16T12:34+09:00':'2026-10-16T12:34:56Z';p.email.sent_at_precision=precision;},old);await api(d).ingest(n);const updated=await current(d);assert.equal(updated.revision,2);assert.equal(updated.payload.email.sent_at,n.entries[0].payload.email.sent_at);
+ const history=await sdk.getDoc(sdk.doc(d,casePath+'/history/1'));assert.equal(history.data().record.payload.email.sent_at,null);
+});
+for(const [label,change] of [['changed subject',p=>{p.email.sent_at='2026-10-16T12:34:56Z';p.email.subject='Rewritten';}],['removed unknown timestamp',p=>delete p.email.sent_at],['local time without timezone',p=>p.email.sent_at='2026-10-16T12:34'],['changed proof',p=>{p.email.sent_at='2026-10-16T12:34:56Z';p.sent_evidence={kind:'changed'};}]])test('raw source unknown-time enrichment rejects '+label,async()=>{
+ const d=db(),m=await manifest(p=>{p.sent=true;p.status=p.readiness='SENT_WAITING';p.confirmed_revenue_usd=null;p.sent_evidence={kind:'synthetic'};p.email={sent_at:null,subject:'Keep'};});await api(d).ingest(m);const old=await current(d),n=await manifest(change,old);await stage(d,n);await deny(rawSourceUpdate(d,old,n));assert.equal((await current(d)).revision,old.revision);
+});
